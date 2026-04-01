@@ -255,10 +255,10 @@ tr:hover td{background:#f8faff}
           <div class="tbl-scroll">
             <table>
               <thead><tr>
-                <th>#</th><th>Entreprise</th><th>Adresse</th><th>CP</th><th>Ville</th><th>SIRET trouvé</th><th>Confiance</th><th>Statut</th>
+                <th>#</th><th>Entreprise source</th><th>CP</th><th>Ville</th><th>SIRET trouvé</th><th>Nom légal trouvé</th><th>Confiance</th><th>Stratégie</th><th>Statut</th>
               </tr></thead>
               <tbody id="tbody-enrich">
-                <tr><td colspan="8"><div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">Lancez l'analyse pour voir les lignes à enrichir</div></div></td></tr>
+                <tr><td colspan="9"><div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">Lancez l'analyse pour voir les lignes à enrichir</div></div></td></tr>
               </tbody>
             </table>
           </div>
@@ -426,11 +426,12 @@ function renderEnrichTable(results) {
     <tr id="erow-${r.index}">
       <td>${r.index + 1}</td>
       <td title="${r.cleaned[cols.company] || ''}">${(r.cleaned[cols.company] || '').substring(0, 22)}</td>
-      <td title="${r.cleaned[cols.address] || ''}">${(r.cleaned[cols.address] || '').substring(0, 20)}</td>
       <td>${r.cleaned[cols.zip] || ''}</td>
-      <td>${r.cleaned[cols.city] || ''}</td>
+      <td title="${r.cleaned[cols.city] || ''}">${(r.cleaned[cols.city] || '').substring(0, 16)}</td>
       <td id="esiret-${r.index}">—</td>
+      <td id="enom-${r.index}" style="color:#6b7280">—</td>
       <td id="econf-${r.index}">—</td>
+      <td id="estrat-${r.index}" style="font-size:10px;color:#9ca3af">—</td>
       <td id="estatus-${r.index}"><span class="badge b-warn">En attente</span></td>
     </tr>`).join('');
 }
@@ -466,19 +467,21 @@ async function runEnrichment() {
     onResult: (row, result) => {
       if (result.siret) {
         found++;
+        const confColor = result.confidence >= 70 ? '#16a34a' : result.confidence >= 50 ? '#d97706' : '#dc2626';
         document.getElementById('esiret-' + row.index).innerHTML = `<span class="badge b-ok">${result.siret}</span>`;
-        document.getElementById('econf-' + row.index).textContent = result.score + '%';
+        document.getElementById('enom-' + row.index).textContent = (result.nomLegal || '').substring(0, 24);
+        document.getElementById('econf-' + row.index).innerHTML = `<span style="font-weight:600;color:${confColor}">${result.confidence}%</span>`;
+        document.getElementById('estrat-' + row.index).textContent = result.strategy || '';
         document.getElementById('estatus-' + row.index).innerHTML = '<span class="badge b-ok">Trouvé</span>';
         const allCell = document.getElementById('allsiret-' + row.index);
         if (allCell) allCell.innerHTML = `<span class="badge b-ok">${result.siret}</span>`;
-        addLog('✓ ' + (row.cleaned[CONFIG.COLUMNS.company] || '?') + ' → ' + result.siret + ' (' + result.score + '%)', 'ok');
+        addLog('✓ ' + (row.cleaned[CONFIG.COLUMNS.company] || '?') + ' → ' + result.siret + ' "' + (result.nomLegal || '') + '" confiance ' + result.confidence + '% [' + (result.strategy || '') + ']', 'ok');
       } else {
         notFound++;
         document.getElementById('esiret-' + row.index).textContent = '—';
         document.getElementById('estatus-' + row.index).innerHTML = '<span class="badge b-err">Non trouvé</span>';
-        addLog('✗ ' + (row.cleaned[CONFIG.COLUMNS.company] || '?') + ' — ' + result.source, 'warn');
+        addLog('✗ ' + (row.cleaned[CONFIG.COLUMNS.company] || '?') + ' (' + (row.cleaned[CONFIG.COLUMNS.zip] || '') + ') — ' + result.source, 'warn');
       }
-      // Mise à jour métrique
       const remaining = processedResults.filter(r => r.cleaned[CONFIG.COLUMNS.siret] === '[À enrichir]').length;
       document.getElementById('m-enrich').textContent = remaining;
     }
