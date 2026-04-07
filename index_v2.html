@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>HubSpot Cleaner V2</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="config.js"></script>
+<script src="agent.js"></script>
+<script src="siret.js"></script>
+</head>
+<body>
+<input type="file" id="file" />
+<button onclick="process()">Traiter</button>
+
+<script>
+let workbook;
+
+document.getElementById('file').addEventListener('change', e=>{
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    workbook = XLSX.read(ev.target.result, {type:'binary'});
+    console.log("Fichier chargé :", workbook.SheetNames);
+  };
+  reader.readAsBinaryString(e.target.files[0]);
+});
+
+async function process(){
+  if (!workbook) {
+    alert("Charge un fichier d'abord");
+    return;
+  }
+
+  const newWb = XLSX.utils.book_new();
+
+  for(const sheetName of workbook.SheetNames){
+    const ws = workbook.Sheets[sheetName];
+    let rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+
+    const {results} = Agent.processAll(rows);
+
+    await Siret.enrichAll(results);
+
+    const cleaned = results.map(r=>r.cleaned);
+
+    const newWs = XLSX.utils.json_to_sheet(cleaned);
+    XLSX.utils.book_append_sheet(newWb, newWs, sheetName);
+  }
+
+  XLSX.writeFile(newWb, "output.xlsx");
+}
+</script>
+</body>
+</html>
