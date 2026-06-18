@@ -155,6 +155,15 @@ td.empty{color:var(--faint);font-style:italic}
 td.filled{background:var(--jade-soft)!important;color:var(--jade-deep);font-weight:600}
 .preview-foot{padding:10px 14px;border-top:1px solid var(--line);font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--faint);display:flex;justify-content:space-between}
 
+/* Onglets d'aperçu */
+.tabs{display:flex;align-items:center;gap:2px;border-bottom:1px solid var(--line);margin-top:34px}
+.tab{font-family:'Inter',sans-serif;font-size:13px;font-weight:600;color:var(--muted);background:transparent;border:none;border-bottom:2px solid transparent;padding:12px 16px;cursor:pointer;margin-bottom:-1px;transition:color .15s,border-color .15s}
+.tab:hover:not(:disabled){color:var(--ink)}
+.tab.active{color:var(--ink);border-bottom-color:var(--jade)}
+.tab:disabled{color:var(--faint);cursor:not-allowed;opacity:.7}
+.tab-count{margin-left:auto;font-size:11px;color:var(--faint);font-family:'JetBrains Mono',monospace}
+.preview{margin-top:14px}
+
 .error-note{display:none;background:#FDECEA;border:1px solid #F4C9C5;color:#8E2A22;border-radius:10px;padding:14px 16px;font-size:13px;margin-top:20px}
 .error-note.show{display:block}
 
@@ -210,9 +219,9 @@ td.filled{background:var(--jade-soft)!important;color:var(--jade-deep);font-weig
     <div class="grid" id="grid"></div>
 
     <div class="actionbar">
-      <button class="btn-action btn-enrich" id="btn-enrich">
+      <button class="btn-action btn-enrich" id="btn-process">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg>
-        Enrichir les données
+        Nettoyer et enrichir le fichier
       </button>
       <button class="btn-action btn-stop" id="btn-stop">■ Arrêter</button>
       <button class="btn-action btn-export" id="btn-export" disabled>
@@ -229,10 +238,20 @@ td.filled{background:var(--jade-soft)!important;color:var(--jade-deep);font-weig
       <div class="log" id="enrich-log"></div>
     </div>
 
-    <div class="section-label">Aperçu des données <span id="preview-count" style="margin-left:auto;text-transform:none;letter-spacing:0;font-family:Inter;font-size:11px;color:var(--faint)"></span></div>
-    <div class="preview">
-      <div class="tbl-scroll"><table id="preview-table"><thead></thead><tbody></tbody></table></div>
-      <div class="preview-foot"><span id="pf-left">—</span><span id="pf-right">—</span></div>
+    <div class="tabs">
+      <button class="tab active" id="tab-orig">Fichier original</button>
+      <button class="tab" id="tab-clean" disabled title="Lancez « Nettoyer et enrichir » pour générer cet aperçu">Fichier nettoyé et enrichi</button>
+      <span class="tab-count" id="tab-count"></span>
+    </div>
+
+    <div class="preview" id="pane-orig">
+      <div class="tbl-scroll"><table id="table-orig"><thead></thead><tbody></tbody></table></div>
+      <div class="preview-foot"><span id="orig-left">—</span><span id="orig-right">—</span></div>
+    </div>
+
+    <div class="preview" id="pane-clean" style="display:none">
+      <div class="tbl-scroll"><table id="table-clean"><thead></thead><tbody></tbody></table></div>
+      <div class="preview-foot"><span id="clean-left">—</span><span id="clean-right">—</span></div>
     </div>
   </section>
 
@@ -287,7 +306,7 @@ function resolveCols(headers){
 // ============================================================
 //  État global
 // ============================================================
-let fullRows = [], headers = [], cols = {}, currentFilename = '', sheetName = '';
+let fullRows = [], originalRows = [], headers = [], cols = {}, currentFilename = '', sheetName = '';
 let stopFlag = false;
 
 el('brand').addEventListener('click', goHome);
@@ -299,9 +318,11 @@ el('file-input').addEventListener('change', e => { if(e.target.files[0]) loadFil
 el('dropzone').addEventListener('dragover', e => { e.preventDefault(); el('dropzone').classList.add('drag'); });
 el('dropzone').addEventListener('dragleave', () => el('dropzone').classList.remove('drag'));
 el('dropzone').addEventListener('drop', e => { e.preventDefault(); el('dropzone').classList.remove('drag'); if(e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
-el('btn-enrich').addEventListener('click', runEnrichment);
+el('btn-process').addEventListener('click', runProcess);
 el('btn-stop').addEventListener('click', () => { stopFlag = true; });
 el('btn-export').addEventListener('click', exportFile);
+el('tab-orig').addEventListener('click', () => switchTab('orig'));
+el('tab-clean').addEventListener('click', () => { if(!el('tab-clean').disabled) switchTab('clean'); });
 
 function showView(name){
   el('view-home').classList.toggle('show', name==='home');
@@ -363,6 +384,7 @@ function loadFile(file){
       cols = resolveCols(headers);
       const isEmpty = r => headers.every(h => (r[h]||'').toString().trim()==='');
       fullRows = rows.filter(r => !isEmpty(r));
+      originalRows = fullRows.map(r => ({ ...r }));   // copie figée du fichier original
       const emptyCount = rows.length - fullRows.length;
       currentFilename = file.name;
       renderWorkspace(file, rows.length, emptyCount);
@@ -404,34 +426,59 @@ function renderWorkspace(file, totalRows, emptyCount){
   animateCounts();
   requestAnimationFrame(() => { const b=el('bar-fill'); if(b) b.style.width = completeness+'%'; });
 
-  // reset actions
-  el('btn-enrich').disabled = false;
-  el('btn-export').disabled = false;   // on autorise l'export même sans enrichissement (nettoyage de base)
+  // reset actions + onglets
+  el('btn-process').disabled = false;
+  el('btn-export').disabled = true;          // disponible après « Nettoyer et enrichir »
   el('btn-stop').style.display = 'none';
   el('enrich-block').classList.remove('show');
   el('enrich-log').innerHTML = '';
   el('enrich-progress').style.width = '0%';
   el('export-note').classList.remove('show');
+  el('tab-clean').disabled = true;
+  switchTab('orig');
 
-  renderPreview();
+  renderOriginalPreview();
 }
 
-function renderPreview(){
-  const PREVIEW = 20;
-  const slice = fullRows.slice(0, PREVIEW);
-  el('preview-table').querySelector('thead').innerHTML =
+const PREVIEW_N = 20;
+function renderTable(table, columns, rows){
+  const slice = rows.slice(0, PREVIEW_N);
+  const isKnown = h => detectRole(h) || h==='Email principal' || h.indexOf("Nom de l'entreprise")===0 || h==='Phase du cycle de vie' || h==='Source du contact';
+  table.querySelector('thead').innerHTML =
     '<tr><th><span class="idx">#</span></th>' +
-    headers.map((h,i) => `<th class="${detectRole(h)?'known':''}"><span class="idx">${String(i+1).padStart(2,'0')}</span>${escapeHtml(h)}</th>`).join('') + '</tr>';
-  el('preview-table').querySelector('tbody').innerHTML = slice.map((row,i) =>
+    columns.map((h,i) => `<th class="${isKnown(h)?'known':''}"><span class="idx">${String(i+1).padStart(2,'0')}</span>${escapeHtml(h)}</th>`).join('') + '</tr>';
+  table.querySelector('tbody').innerHTML = slice.map((row,i) =>
     `<tr><td style="color:var(--faint);font-family:JetBrains Mono,monospace">${i+1}</td>` +
-    headers.map(h => {
-      const v = (row[h]||'').toString().trim();
-      const cls = v ? (row.__filled && row.__filled[h] ? 'filled' : '') : 'empty';
-      return v ? `<td class="${cls}" title="${escapeHtml(v)}">${escapeHtml(v)}</td>` : '<td class="empty">vide</td>';
+    columns.map(h => {
+      const v = (row[h]==null?'':row[h]).toString().trim();
+      if(!v) return '<td class="empty">vide</td>';
+      const filled = row.__filled && row.__filled[h];
+      return `<td class="${filled?'filled':''}" title="${escapeHtml(v)}">${escapeHtml(v)}</td>`;
     }).join('') + '</tr>').join('');
-  el('preview-count').textContent = `${Math.min(PREVIEW, fullRows.length)} premières lignes utiles`;
-  el('pf-left').textContent = `${headers.length} colonnes`;
-  el('pf-right').textContent = `${formatFr(fullRows.length)} lignes utiles`;
+  return Math.min(PREVIEW_N, rows.length);
+}
+
+function renderOriginalPreview(){
+  renderTable(el('table-orig'), headers, originalRows);
+  el('orig-left').textContent = `${headers.length} colonnes`;
+  el('orig-right').textContent = `${formatFr(originalRows.length)} lignes utiles`;
+}
+
+function renderCleanedPreview(){
+  const { outCols, rows } = buildOutput();
+  renderTable(el('table-clean'), outCols, rows);
+  el('clean-left').textContent = `${outCols.length} colonnes`;
+  el('clean-right').textContent = `${formatFr(rows.length)} lignes`;
+}
+
+function switchTab(which){
+  const orig = which === 'orig';
+  el('tab-orig').classList.toggle('active', orig);
+  el('tab-clean').classList.toggle('active', !orig);
+  el('pane-orig').style.display = orig ? '' : 'none';
+  el('pane-clean').style.display = orig ? 'none' : '';
+  el('tab-count').textContent = `${PREVIEW_N} premières lignes`;
+  if(!orig) renderCleanedPreview();
 }
 
 // ============================================================
@@ -493,58 +540,66 @@ const Sirene = {
 function siretDigits(v){ let s=(v||'').toString().trim().replace(/\s/g,''); if(/e/i.test(s)||s.includes('.')){ const n=Number(s); if(isFinite(n)) s=Math.round(n).toString(); } return s; }
 function hasSiret(row){ return cols.siret && /^\d{14}$/.test(siretDigits(row[cols.siret])); }
 
-async function runEnrichment(){
-  if(!cols.company){ showError("Pas de colonne « entreprise » détectée : l'enrichissement a besoin du nom d'entreprise."); return; }
+async function runProcess(){
   stopFlag = false;
-  el('btn-enrich').disabled = true;
+  el('btn-process').disabled = true;
   el('btn-export').disabled = true;
   el('btn-stop').style.display = 'inline-flex';
   el('enrich-block').classList.add('show');
+  el('enrich-progress').style.width = '0%';
   const log = el('enrich-log'); log.innerHTML = '';
   const addLog = (msg, type) => { const d=document.createElement('div'); d.className='log-'+(type||'info'); d.textContent=new Date().toLocaleTimeString()+' · '+msg; log.appendChild(d); log.scrollTop=log.scrollHeight; };
 
-  const targets = fullRows.filter(r => !hasSiret(r) && (r[cols.company]||'').toString().trim());
-  if(!targets.length){ addLog('Aucune ligne à enrichir : tous les SIRET sont déjà renseignés.', 'ok'); finishEnrich(); return; }
-
-  addLog(`Enrichissement de ${targets.length} ligne(s) via l'API Sirene…`, 'info');
-  const cache = new Map();
-  let done=0, found=0, miss=0;
-
-  for(const row of targets){
-    if(stopFlag){ addLog('Arrêté par l\'utilisateur.', 'warn'); break; }
-    const nom = Sirene.cleanStr(row[cols.company]);
-    const adresse = Sirene.cleanStr(cols.adresse && row[cols.adresse]);
-    const cp = Sirene.cleanStr(cols.cp && row[cols.cp]);
-    const ville = Sirene.cleanStr(cols.ville && row[cols.ville]);
-    const key = Sirene.normalize(nom)+'|'+cp;
-
-    let result;
-    if(cache.has(key)){ result = cache.get(key); }
-    else { try{ result = await Sirene.search(nom, adresse, cp, ville); }catch{ result=null; } cache.set(key, result); await sleep(Sirene.DELAY_MS); }
-
-    if(result && result.siret){
-      found++;
-      row.__filled = row.__filled || {};
-      if(cols.siret){ row[cols.siret]=result.siret; row.__filled[cols.siret]=true; }
-      const fillIfEmpty = (col, v) => { if(col && v && !(row[col]||'').toString().trim()){ row[col]=v; row.__filled[col]=true; } };
-      fillIfEmpty(cols.cp, result.cpFound);
-      fillIfEmpty(cols.ville, result.villeFound);
-      fillIfEmpty(cols.adresse, result.adresseFound);
-      fillIfEmpty(cols.effectif, result.effectif);
-      addLog(`✓ ${nom} → ${result.siret} (${result.confidence}% · ${result.strategy})`, 'ok');
-    } else { miss++; addLog(`✗ ${nom}${cp?' ('+cp+')':''} — non trouvé`, 'warn'); }
-
-    done++;
-    const pctv = Math.round(done/targets.length*100);
-    el('enrich-progress').style.width = pctv+'%';
-    el('enrich-label').textContent = `${done} / ${targets.length} traités (${pctv}%) — ${found} trouvés, ${miss} non trouvés`;
+  // Enrichissement (si une colonne entreprise existe)
+  if(!cols.company){
+    addLog("Pas de colonne « entreprise » détectée : enrichissement ignoré, nettoyage seul.", 'warn');
+  } else {
+    const targets = fullRows.filter(r => !hasSiret(r) && (r[cols.company]||'').toString().trim());
+    if(!targets.length){
+      addLog('Aucun SIRET à enrichir : ils sont déjà tous renseignés.', 'ok');
+    } else {
+      addLog(`Enrichissement de ${targets.length} ligne(s) via l'API Sirene…`, 'info');
+      const cache = new Map();
+      let done=0, found=0, miss=0;
+      for(const row of targets){
+        if(stopFlag){ addLog("Arrêté par l'utilisateur.", 'warn'); break; }
+        const nom = Sirene.cleanStr(row[cols.company]);
+        const adresse = Sirene.cleanStr(cols.adresse && row[cols.adresse]);
+        const cp = Sirene.cleanStr(cols.cp && row[cols.cp]);
+        const ville = Sirene.cleanStr(cols.ville && row[cols.ville]);
+        const key = Sirene.normalize(nom)+'|'+cp;
+        let result;
+        if(cache.has(key)){ result = cache.get(key); }
+        else { try{ result = await Sirene.search(nom, adresse, cp, ville); }catch{ result=null; } cache.set(key, result); await sleep(Sirene.DELAY_MS); }
+        if(result && result.siret){
+          found++;
+          row.__filled = row.__filled || {};
+          if(cols.siret){ row[cols.siret]=result.siret; row.__filled[cols.siret]=true; }
+          const fillIfEmpty = (col, v) => { if(col && v && !(row[col]||'').toString().trim()){ row[col]=v; row.__filled[col]=true; } };
+          fillIfEmpty(cols.cp, result.cpFound);
+          fillIfEmpty(cols.ville, result.villeFound);
+          fillIfEmpty(cols.adresse, result.adresseFound);
+          fillIfEmpty(cols.effectif, result.effectif);
+          addLog(`✓ ${nom} → ${result.siret} (${result.confidence}% · ${result.strategy})`, 'ok');
+        } else { miss++; addLog(`✗ ${nom}${cp?' ('+cp+')':''} — non trouvé`, 'warn'); }
+        done++;
+        const pctv = Math.round(done/targets.length*100);
+        el('enrich-progress').style.width = pctv+'%';
+        el('enrich-label').textContent = `${done} / ${targets.length} traités (${pctv}%) — ${found} trouvés, ${miss} non trouvés`;
+      }
+      addLog(`Enrichissement terminé : ${found} trouvé(s), ${miss} non trouvé(s).`, 'ok');
+    }
   }
 
-  addLog(`Terminé : ${found} enrichi(s), ${miss} non trouvé(s).`, 'ok');
-  renderPreview();
-  finishEnrich();
+  // Nettoyage + aperçu du résultat
+  addLog('Nettoyage appliqué (casse, téléphones, dates, colonnes, doublons d\'email).', 'ok');
+  el('enrich-progress').style.width = '100%';
+  el('tab-clean').disabled = false;
+  switchTab('clean');
+  el('btn-export').disabled = false;
+  el('btn-process').disabled = false;
+  el('btn-stop').style.display = 'none';
 }
-function finishEnrich(){ el('btn-enrich').disabled=false; el('btn-export').disabled=false; el('btn-stop').style.display='none'; }
 
 // ============================================================
 //  NETTOYAGE + EXPORT + HISTORIQUE
@@ -635,12 +690,13 @@ function buildOutput(){
 
     // Objet de sortie dans l'ordre voulu
     const out = {};
+    out.__filled = {};
     outCols.forEach(c => {
       if(c === 'Email principal') out[c] = email;
       else if(c === COMPANY_COL_1 || c === COMPANY_COL_2) out[c] = companyName;
       else if(c === 'Phase du cycle de vie') out[c] = 'Lead';
       else if(c === 'Source du contact') out[c] = 'Salon';
-      else out[c] = r[c] ?? '';
+      else { out[c] = r[c] ?? ''; if(src.__filled && src.__filled[c]) out.__filled[c] = true; }
     });
     return out;
   });
