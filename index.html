@@ -276,6 +276,8 @@ function resolveCols(headers){
     ville: find(/ville/),
     adresse: headers.find(h=>/adresse/.test(norm(h))&&!/2/.test(h)) || find(/adresse/),
     effectif: find(/effectif/),
+    firstname: headers.find(h=>norm(h)==='prenom') || find(/^prenom/),
+    lastname:  headers.find(h=>norm(h)==='nom'),
     emails: findAll(/mail|email|courriel/),
     phones: findAll(/tel|phone|portable|mobile/),
     dates: findAll(/date/),
@@ -562,40 +564,105 @@ function excelDate(v){
   const p=x=>String(x).padStart(2,'0');
   return `${p(d.getUTCDate())}/${p(d.getUTCMonth()+1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
 }
-function buildCleanedRows(){
-  return fullRows.map(src => {
-    const r = {};
-    headers.forEach(h => r[h] = (src[h]==null?'':src[h]));
-    // SIRET en texte propre
-    if(cols.siret) r[cols.siret] = siretDigits(r[cols.siret]) || '';
-    // Email principal
-    if(cols.emails.length){
-      const e = cols.emails.map(c => (r[c]||'').toString().trim()).find(v=>v) || '';
-      r['Email principal'] = e;
-    }
-    // Téléphones en +33
-    cols.phones.forEach(c => { if(r[c]) r[c]=formatPhone(r[c]); });
-    // Dates lisibles
-    cols.dates.forEach(c => { if(r[c]!=='' && r[c]!=null && !isNaN(Number(r[c]))) r[c]=excelDate(r[c]); });
-    return r;
-  });
+// Sigles d'entreprise à garder en majuscules
+const COMPANY_ACRONYMS = new Set(['SARL','SAS','SASU','SA','EURL','SCI','SCM','SCP','SCOP','SNC','SCS','GIE','SE','EI','EIRL','EHPAD','CSE','CSEE','CSEC','CCAS','CHU','CHR','CH','RH','IME','ITEP','ESAT','MJC','CFA','BTP','TP','SDIS','GMBH','LLC','LTD','SIVU','SIVOM','SMIC','CCI','CMA','MFR','APEI','ADMR','UDAF']);
+// Mots de liaison en minuscules (sauf en début)
+const LOWER_WORDS = new Set(['de','du','des','la','le','les','et','aux','au','en','sur','sous','d','l']);
+function properCase(str, opts){
+  opts = opts || {};
+  const s = (str||'').toString().trim();
+  if(!s) return s;
+  return s.split(/\s+/).map((w, i) => {
+    if(opts.company && COMPANY_ACRONYMS.has(w.toUpperCase())) return w.toUpperCase();
+    if(i > 0 && LOWER_WORDS.has(w.toLowerCase().replace(/[.'’]/g,''))) return w.toLowerCase();
+    let out = w.toLowerCase().replace(/(^|[-'’])([a-zà-ÿ])/g, (m, sep, ch) => sep + ch.toUpperCase());
+    if(i > 0) out = out.replace(/^([DLNMTSJC])(['’])/, (m, p, ap) => p.toLowerCase() + ap); // particule élidée : d', l'…
+    return out;
+  }).join(' ');
 }
+
+// ============================================================
+//  CONSTRUCTION DU FICHIER DE SORTIE
+//  - casse « nom propre » (prénom, nom, entreprise)
+//  - nettoyage (SIRET, téléphones +33, dates)
+//  - colonnes ajoutées : Phase du cycle de vie = Lead, Source du contact = Salon
+//  - entreprise dupliquée en deux colonnes
+//  - email unique : vidé si déjà utilisé par un autre contact
+// ============================================================
+const COMPANY_COL_1 = "Nom de l'entreprise - entreprise";
+const COMPANY_COL_2 = "Nom de l'entreprise - contact";
+
+function buildOutput(){
+  const emailsPresent = cols.emails.length > 0;
+
+  // Ordre des colonnes de sortie
+  const outCols = [];
+  if(emailsPresent) outCols.push('Email principal');
+  headers.forEach(h => {
+    if(cols.company && h === cols.company){ outCols.push(COMPANY_COL_1, COMPANY_COL_2); }
+    else outCols.push(h);
+  });
+  outCols.push('Phase du cycle de vie', 'Source du contact');
+
+  const seenEmail = new Set();
+  let removedEmails = 0;
+
+  const rows = fullRows.map(src => {
+    const r = {};
+    headers.forEach(h => r[h] = (src[h]==null ? '' : src[h]));
+
+    // Nettoyage de base
+    if(cols.siret) r[cols.siret] = siretDigits(r[cols.siret]) || '';
+    cols.phones.forEach(c => { if(r[c]) r[c] = formatPhone(r[c]); });
+    cols.dates.forEach(c => { if(r[c]!=='' && r[c]!=null && !isNaN(Number(r[c]))) r[c] = excelDate(r[c]); });
+
+    // Casse nom propre
+    if(cols.firstname && r[cols.firstname]) r[cols.firstname] = properCase(r[cols.firstname]);
+    if(cols.lastname  && r[cols.lastname])  r[cols.lastname]  = properCase(r[cols.lastname]);
+    const companyName = cols.company ? properCase((r[cols.company]||'').toString(), {company:true}) : '';
+
+    // Email principal + dédoublonnage
+    let email = '';
+    if(emailsPresent){
+      email = cols.emails.map(c => (r[c]||'').toString().trim()).find(v=>v) || '';
+      const key = email.toLowerCase();
+      if(email && seenEmail.has(key)){
+        cols.emails.forEach(c => { if((r[c]||'').toString().trim().toLowerCase() === key) r[c] = ''; });
+        email = '';
+        removedEmails++;
+      } else if(email){ seenEmail.add(key); }
+    }
+
+    // Objet de sortie dans l'ordre voulu
+    const out = {};
+    outCols.forEach(c => {
+      if(c === 'Email principal') out[c] = email;
+      else if(c === COMPANY_COL_1 || c === COMPANY_COL_2) out[c] = companyName;
+      else if(c === 'Phase du cycle de vie') out[c] = 'Lead';
+      else if(c === 'Source du contact') out[c] = 'Salon';
+      else out[c] = r[c] ?? '';
+    });
+    return out;
+  });
+
+  return { outCols, rows, removedEmails };
+}
+
 function buildWorkbook(){
-  const rows = buildCleanedRows();
-  const outCols = (cols.emails.length ? ['Email principal'] : []).concat(headers);
+  const { outCols, rows, removedEmails } = buildOutput();
   const aoa = [outCols, ...rows.map(r => outCols.map(c => r[c] ?? ''))];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!cols'] = outCols.map(() => ({ wch:22 }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Contacts');
-  return { wb, count: rows.length };
+  return { wb, count: rows.length, removedEmails };
 }
 function outName(){
   const base = currentFilename.replace(/\.(xlsx|xls|csv)$/i,'');
   return `${base}_nettoye_${new Date().toISOString().slice(0,10)}.xlsx`;
 }
 async function exportFile(){
-  const { wb, count } = buildWorkbook();
+  const { wb, count, removedEmails } = buildWorkbook();
   const name = outName();
   const arr = XLSX.write(wb, { bookType:'xlsx', type:'array' });
   const blob = new Blob([arr], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -611,7 +678,7 @@ async function exportFile(){
   const note = el('export-note');
   const link = (SHARED_DRIVE_URL && /^https?:\/\//.test(SHARED_DRIVE_URL))
     ? `<a href="${SHARED_DRIVE_URL}" target="_blank" rel="noopener">Ouvrir le drive →</a>` : '';
-  note.innerHTML = `✓ « ${escapeHtml(name)} » téléchargé. Pensez à le déposer dans le drive partagé de l'équipe.${link}`;
+  note.innerHTML = `✓ « ${escapeHtml(name)} » téléchargé (${formatFr(count)} contacts${removedEmails?`, ${formatFr(removedEmails)} email(s) en doublon vidé(s)`:''}). Pensez à le déposer dans le drive partagé de l'équipe.${link}`;
   note.classList.add('show');
 }
 
