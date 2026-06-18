@@ -78,6 +78,26 @@ body{
 .btn-del:hover{border-color:var(--red);color:var(--red);background:#FDECEA}
 .files-empty{background:var(--surface);border:1px dashed var(--line);border-radius:11px;padding:32px 20px;text-align:center;color:var(--faint);font-size:13px}
 
+/* Dossier partagé */
+.drive-card{display:flex;align-items:center;gap:16px;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--jade);border-radius:11px;padding:16px 18px}
+.drive-card.unset{border-left-color:var(--amber)}
+.dc-icon{width:42px;height:42px;flex-shrink:0;display:grid;place-items:center;border-radius:9px;background:var(--jade-soft);color:var(--jade-deep)}
+.drive-card.unset .dc-icon{background:var(--amber-soft);color:var(--amber)}
+.dc-icon svg{width:22px;height:22px}
+.dc-meta{flex:1;min-width:0}
+.dc-title{font-weight:600;font-size:14px}
+.dc-sub{font-size:12px;color:var(--muted);margin-top:3px}
+.dc-sub code{font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--paper);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+.dc-open{flex-shrink:0;display:inline-flex;align-items:center;gap:9px;font-size:13px;font-weight:600;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:9px;padding:9px 15px;cursor:pointer;text-decoration:none}
+.dc-open:hover{border-color:var(--jade);background:var(--jade-soft)}
+.dc-open .gdrive{width:18px;height:18px;flex-shrink:0}
+
+/* Rappel après export */
+.export-note{display:none;align-items:center;gap:12px;background:var(--jade-soft);border:1px solid #C9E8DC;border-radius:10px;padding:12px 16px;margin:14px 0 4px;font-size:13px;color:var(--jade-deep)}
+.export-note.show{display:flex}
+.export-note a{margin-left:auto;flex-shrink:0;font-weight:600;color:#fff;background:var(--jade);border-radius:8px;padding:7px 13px;text-decoration:none;font-size:12px}
+.export-note a:hover{background:var(--jade-deep)}
+
 /* File bar */
 .filebar{display:none;align-items:center;gap:16px;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--jade);border-radius:11px;padding:14px 18px;margin-bottom:22px}
 .filebar.show{display:flex}
@@ -172,7 +192,10 @@ td.filled{background:var(--jade-soft)!important;color:var(--jade-deep);font-weig
       <div class="dz-formats"><span class="fmt">.xlsx</span><span class="fmt">.xls</span><span class="fmt">.csv</span></div>
     </div>
 
-    <div class="section-label">Fichiers nettoyés</div>
+    <div class="section-label">Dossier partagé de l'équipe</div>
+    <div id="drive-host"></div>
+
+    <div class="section-label">Mes fichiers nettoyés <span style="margin-left:auto;text-transform:none;letter-spacing:0;font-family:Inter;font-size:11px;color:var(--faint)">sur cet ordinateur</span></div>
     <div id="files-host"></div>
   </section>
 
@@ -198,6 +221,8 @@ td.filled{background:var(--jade-soft)!important;color:var(--jade-deep);font-weig
       </button>
     </div>
 
+    <div class="export-note" id="export-note"></div>
+
     <div class="enrich-block" id="enrich-block">
       <div class="progress-wrap"><div class="progress-fill" id="enrich-progress"></div></div>
       <div class="progress-label" id="enrich-label">En attente…</div>
@@ -216,6 +241,15 @@ td.filled{background:var(--jade-soft)!important;color:var(--jade-deep);font-weig
 
 <script>
 const el = id => document.getElementById(id);
+
+// ============================================================
+//  ⚙️  CONFIGURATION  ⚙️
+//  Collez ci-dessous le lien de votre dossier Google Drive partagé
+//  (entre les apostrophes). Laissez vide pour masquer le bouton.
+//  Exemple : 'https://drive.google.com/drive/folders/XXXXXXXXXXXX'
+// ============================================================
+const SHARED_DRIVE_URL = 'https://drive.google.com/drive/folders/11MQ6Iy5e15iXEnf-Ymxg4AOMmzwl2zu2';
+// ============================================================
 
 // ============================================================
 //  Détection des colonnes
@@ -274,7 +308,42 @@ function showView(name){
   el('topbar-tag').textContent = name==='workspace' ? (currentFilename || 'v2') : 'v2';
   window.scrollTo({top:0});
 }
-function goHome(){ showView('home'); renderHistory(); }
+function goHome(){ showView('home'); renderDrive(); renderHistory(); }
+
+// Bloc « Dossier partagé de l'équipe »
+function renderDrive(){
+  const host = el('drive-host');
+  if(SHARED_DRIVE_URL && /^https?:\/\//.test(SHARED_DRIVE_URL)){
+    host.innerHTML = `
+      <div class="drive-card">
+        <div class="dc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>
+        <div class="dc-meta">
+          <div class="dc-title">Dossier partagé de l'équipe</div>
+          <div class="dc-sub">Déposez-y vos fichiers nettoyés pour que tout le monde y ait accès.</div>
+        </div>
+        <a class="dc-open" href="${SHARED_DRIVE_URL}" target="_blank" rel="noopener">
+          <svg class="gdrive" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
+            <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
+            <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44c-.8 1.4-1.2 2.95-1.2 4.5h27.5z" fill="#00ac47"/>
+            <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
+            <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/>
+            <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/>
+            <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
+          </svg>
+          Les fichiers importés dans ce drive
+        </a>
+      </div>`;
+  } else {
+    host.innerHTML = `
+      <div class="drive-card unset">
+        <div class="dc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></div>
+        <div class="dc-meta">
+          <div class="dc-title">Lien du dossier partagé non configuré</div>
+          <div class="dc-sub">Ouvrez <code>index.html</code> et collez l'adresse du dossier Drive dans <code>SHARED_DRIVE_URL</code> en haut du fichier.</div>
+        </div>
+      </div>`;
+  }
+}
 
 // ============================================================
 //  Lecture du fichier
@@ -340,6 +409,7 @@ function renderWorkspace(file, totalRows, emptyCount){
   el('enrich-block').classList.remove('show');
   el('enrich-log').innerHTML = '';
   el('enrich-progress').style.width = '0%';
+  el('export-note').classList.remove('show');
 
   renderPreview();
 }
@@ -536,6 +606,13 @@ async function exportFile(){
   // sauvegarde dans l'historique
   try{ await dbPut({ id:'f_'+Date.now()+'_'+Math.random().toString(36).slice(2,7), name, date:Date.now(), rows:count, blob }); }
   catch(e){ /* stockage indisponible (ex. aperçu en bac à sable) */ }
+
+  // rappel : déposer dans le dossier partagé
+  const note = el('export-note');
+  const link = (SHARED_DRIVE_URL && /^https?:\/\//.test(SHARED_DRIVE_URL))
+    ? `<a href="${SHARED_DRIVE_URL}" target="_blank" rel="noopener">Ouvrir le drive →</a>` : '';
+  note.innerHTML = `✓ « ${escapeHtml(name)} » téléchargé. Pensez à le déposer dans le drive partagé de l'équipe.${link}`;
+  note.classList.add('show');
 }
 
 // ============================================================
@@ -601,6 +678,7 @@ function showError(m){ const n=el('error-note'); n.textContent=m; n.classList.ad
 function hideError(){ el('error-note').classList.remove('show'); }
 
 // Init
+renderDrive();
 renderHistory();
 </script>
 </body>
