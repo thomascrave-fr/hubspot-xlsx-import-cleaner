@@ -3,529 +3,557 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Agent HubSpot Cleaner</title>
+<title>HubSpot Cleaner — Préparation des imports</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="config.js"></script>
-<script src="agent.js"></script>
-<script src="siret.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
+:root{
+  --ink:#14233A;
+  --ink-soft:#2A3A52;
+  --paper:#F5F7FA;
+  --surface:#FFFFFF;
+  --line:#E4E8EF;
+  --line-soft:#EDF0F5;
+  --muted:#6B7686;
+  --faint:#9AA4B2;
+  --jade:#0E9E78;
+  --jade-deep:#0B7A5D;
+  --jade-soft:#E7F6F0;
+  --amber:#C77A12;
+  --red:#D6453C;
+  --blue:#2F6BD6;
+}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,sans-serif;font-size:13px;background:#f0f2f5;color:#1a1a2e;min-height:100vh}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:'Inter',system-ui,sans-serif;
+  background:var(--paper);
+  color:var(--ink);
+  font-size:14px;
+  line-height:1.5;
+  min-height:100vh;
+  /* fine grid texture — the "instrument" surface */
+  background-image:
+    linear-gradient(var(--line-soft) 1px,transparent 1px),
+    linear-gradient(90deg,var(--line-soft) 1px,transparent 1px);
+  background-size:48px 48px;
+  background-position:-1px -1px;
+}
 
-/* Header */
-.header{background:#1a3a5c;color:#fff;padding:0 28px;height:56px;display:flex;align-items:center;justify-content:space-between;gap:16px}
-.header-logo{font-size:15px;font-weight:700;letter-spacing:.01em}
-.header-sub{font-size:11px;opacity:.6;margin-top:2px}
-.api-badge{font-size:11px;padding:4px 12px;border-radius:99px;border:1px solid rgba(255,255,255,.3);cursor:pointer;background:transparent;color:#fff}
-.api-badge.ok{border-color:#4ade80;color:#4ade80}
-.api-badge.missing{border-color:#fbbf24;color:#fbbf24}
+/* ---------- Header ---------- */
+.topbar{
+  background:var(--ink);
+  color:#fff;
+  height:60px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 clamp(16px,4vw,40px);
+  border-bottom:3px solid var(--jade);
+}
+.brand{display:flex;align-items:baseline;gap:12px}
+.brand-mark{
+  font-family:'Space Grotesk',sans-serif;
+  font-weight:700;
+  font-size:17px;
+  letter-spacing:-.01em;
+}
+.brand-sub{font-size:11px;color:rgba(255,255,255,.55);letter-spacing:.04em}
+.topbar-tag{
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:.12em;
+  color:rgba(255,255,255,.45);
+  border:1px solid rgba(255,255,255,.18);
+  padding:5px 10px;
+  border-radius:4px;
+}
 
-/* Layout */
-.main{display:grid;grid-template-columns:300px 1fr;gap:0;min-height:calc(100vh - 56px)}
+/* ---------- Shell ---------- */
+.shell{
+  max-width:1080px;
+  margin:0 auto;
+  padding:clamp(24px,5vw,52px) clamp(16px,4vw,40px) 64px;
+}
 
-/* Sidebar */
-.sidebar{background:#fff;border-right:1px solid #e4e7ed;padding:20px;display:flex;flex-direction:column;gap:16px}
-.sidebar-section{font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.eyebrow{
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:var(--jade-deep);
+  margin-bottom:10px;
+}
+.page-title{
+  font-family:'Space Grotesk',sans-serif;
+  font-weight:600;
+  font-size:clamp(24px,4vw,32px);
+  letter-spacing:-.02em;
+  line-height:1.1;
+  margin-bottom:8px;
+}
+.page-lede{color:var(--muted);max-width:46ch;margin-bottom:28px}
 
-/* Upload zone */
-.drop-zone{border:1.5px dashed #c5ccd8;border-radius:10px;padding:24px 16px;text-align:center;cursor:pointer;transition:background .15s,border-color .15s}
-.drop-zone:hover,.drop-zone.drag{background:#f0f4ff;border-color:#4b7bec}
-.drop-zone.loaded{border-color:#22c55e;border-style:solid;background:#f0fdf4}
-.drop-icon{font-size:28px;color:#9ca3af;margin-bottom:8px}
-.drop-title{font-size:13px;font-weight:600;color:#374151;margin-bottom:4px}
-.drop-sub{font-size:11px;color:#9ca3af}
-.drop-file{font-size:12px;color:#16a34a;margin-top:8px;font-weight:600}
+/* ---------- Drop zone ---------- */
+.dropzone{
+  position:relative;
+  background:var(--surface);
+  border:1.5px dashed #C3CBD8;
+  border-radius:14px;
+  padding:clamp(36px,7vw,64px) 24px;
+  text-align:center;
+  cursor:pointer;
+  transition:border-color .18s,background .18s,transform .18s;
+  outline:none;
+}
+.dropzone:hover{border-color:var(--jade);background:#FCFEFD}
+.dropzone:focus-visible{border-color:var(--jade);box-shadow:0 0 0 4px var(--jade-soft)}
+.dropzone.drag{border-color:var(--jade);border-style:solid;background:var(--jade-soft);transform:scale(.995)}
+.dropzone.loaded{display:none}
+.dz-icon{
+  width:52px;height:52px;margin:0 auto 18px;
+  display:grid;place-items:center;
+  border-radius:13px;
+  background:var(--jade-soft);
+  color:var(--jade-deep);
+}
+.dz-icon svg{width:26px;height:26px}
+.dz-title{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:17px;margin-bottom:6px}
+.dz-sub{color:var(--muted);font-size:13px}
+.dz-formats{
+  margin-top:18px;
+  display:inline-flex;gap:7px;flex-wrap:wrap;justify-content:center;
+}
+.fmt{
+  font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;
+  letter-spacing:.04em;color:var(--muted);
+  background:var(--paper);border:1px solid var(--line);
+  padding:3px 9px;border-radius:5px;
+}
 
-/* Règles */
-.rule-item{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #f3f4f6;font-size:12px}
-.rule-item:last-child{border-bottom:none}
-.rule-toggle{width:32px;height:18px;border-radius:99px;border:none;cursor:pointer;position:relative;transition:background .2s;flex-shrink:0}
-.rule-toggle.on{background:#22c55e}
-.rule-toggle.off{background:#d1d5db}
-.rule-toggle::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .2s}
-.rule-toggle.on::after{transform:translateX(14px)}
-.rule-label{flex:1;color:#374151}
-.sev-error{color:#dc2626;font-size:10px;font-weight:700}
-.sev-warning{color:#d97706;font-size:10px;font-weight:700}
-.sev-info{color:#2563eb;font-size:10px;font-weight:700}
+/* ---------- File bar (after load) ---------- */
+.filebar{
+  display:none;
+  align-items:center;
+  gap:16px;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-left:4px solid var(--jade);
+  border-radius:11px;
+  padding:14px 18px;
+  margin-bottom:22px;
+}
+.filebar.show{display:flex}
+.fb-icon{
+  width:40px;height:40px;flex-shrink:0;
+  display:grid;place-items:center;border-radius:9px;
+  background:var(--jade-soft);color:var(--jade-deep);
+}
+.fb-icon svg{width:20px;height:20px}
+.fb-meta{min-width:0;flex:1}
+.fb-name{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fb-detail{
+  font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--faint);
+  margin-top:3px;letter-spacing:.02em;
+}
+.fb-replace{
+  flex-shrink:0;
+  font-family:'Inter',sans-serif;font-size:12px;font-weight:600;
+  color:var(--jade-deep);background:transparent;
+  border:1px solid var(--line);border-radius:8px;
+  padding:8px 14px;cursor:pointer;transition:border-color .15s,background .15s;
+}
+.fb-replace:hover{border-color:var(--jade);background:var(--jade-soft)}
 
-/* Boutons sidebar */
-.btn{width:100%;padding:10px;border-radius:8px;border:none;font-size:13px;font-weight:600;cursor:pointer;transition:opacity .15s}
-.btn:disabled{opacity:.4;cursor:not-allowed}
-.btn-primary{background:#1a3a5c;color:#fff}
-.btn-primary:hover:not(:disabled){background:#14305c}
-.btn-enrich{background:#7c3aed;color:#fff}
-.btn-enrich:hover:not(:disabled){background:#6d28d9}
-.btn-export{background:#16a34a;color:#fff}
-.btn-export:hover:not(:disabled){background:#15803d}
-.btn-stop{background:#ef4444;color:#fff}
+/* ---------- Stats ---------- */
+.stats{display:none}
+.stats.show{display:block;animation:fade .4s ease}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
-/* Content area */
-.content{padding:20px 24px;display:flex;flex-direction:column;gap:16px;overflow-y:auto}
+.section-label{
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--faint);
+  display:flex;align-items:center;gap:10px;
+  margin:0 0 14px;
+}
+.section-label::after{content:'';flex:1;height:1px;background:var(--line)}
 
-/* Metrics */
-.metrics{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
-.metric{background:#fff;border-radius:8px;padding:12px 14px;border:1px solid #e4e7ed}
-.metric-label{font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
-.metric-value{font-size:22px;font-weight:700;color:#1a3a5c}
-.metric-value.green{color:#16a34a}
-.metric-value.red{color:#dc2626}
-.metric-value.orange{color:#d97706}
-.metric-value.purple{color:#7c3aed}
-.metric-value.blue{color:#2563eb}
+.grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:12px;
+  margin-bottom:30px;
+}
+.stat{
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:11px;
+  padding:16px 18px;
+}
+.stat-label{
+  font-size:11px;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:10px;font-weight:600;
+}
+.stat-value{
+  font-family:'JetBrains Mono',monospace;
+  font-weight:700;font-size:30px;line-height:1;
+  letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;
+  color:var(--ink);
+}
+.stat-value .unit{font-size:14px;color:var(--faint);font-weight:600;margin-left:2px}
+.stat-foot{font-size:11px;color:var(--faint);margin-top:8px}
+.stat-foot strong{color:var(--jade-deep);font-weight:600}
+.stat.accent .stat-value{color:var(--jade-deep)}
+.stat.warn .stat-value{color:var(--amber)}
 
-/* Progress */
-.progress-wrap{background:#e5e7eb;border-radius:99px;height:6px;overflow:hidden}
-.progress-fill{height:6px;border-radius:99px;background:#7c3aed;transition:width .3s}
-.progress-label{font-size:12px;color:#6b7280;margin-top:4px}
+/* completeness bar */
+.bar-track{height:6px;border-radius:99px;background:var(--line-soft);overflow:hidden;margin-top:10px}
+.bar-fill{height:100%;border-radius:99px;background:var(--jade);width:0;transition:width .8s cubic-bezier(.2,.7,.2,1)}
 
-/* AI block */
-.ai-box{background:#fff;border-radius:10px;border:1px solid #e4e7ed;padding:14px 18px}
-.ai-box-title{font-size:11px;font-weight:700;color:#7c3aed;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
-.ai-text{font-size:13px;line-height:1.7;color:#374151;white-space:pre-wrap}
-.ai-placeholder{font-size:13px;color:#9ca3af;font-style:italic}
+/* ---------- Detected columns ---------- */
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:30px}
+.chip{
+  display:inline-flex;align-items:center;gap:7px;
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:8px;padding:6px 11px;font-size:12px;
+}
+.chip .dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex-shrink:0}
+.chip.known{border-color:#C9E8DC;background:var(--jade-soft)}
+.chip.known .dot{background:var(--jade)}
+.chip .role{
+  font-family:'JetBrains Mono',monospace;font-size:9px;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--jade-deep);
+  background:#fff;border:1px solid #C9E8DC;border-radius:4px;padding:1px 5px;
+}
 
-/* Tabs */
-.tabs{display:flex;gap:2px;border-bottom:2px solid #e4e7ed}
-.tab{padding:8px 16px;font-size:13px;cursor:pointer;color:#6b7280;border-bottom:2px solid transparent;margin-bottom:-2px;font-weight:500}
-.tab.active{color:#1a3a5c;border-bottom-color:#1a3a5c}
+/* ---------- Preview table ---------- */
+.preview{
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:11px;overflow:hidden;
+}
+.tbl-scroll{overflow-x:auto;max-height:380px;overflow-y:auto}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th{
+  position:sticky;top:0;
+  background:var(--ink);color:#fff;
+  text-align:left;font-weight:600;font-size:11px;
+  letter-spacing:.02em;white-space:nowrap;
+  padding:10px 12px;
+}
+th.known{color:#9BE6CC}
+th .idx{font-family:'JetBrains Mono',monospace;color:rgba(255,255,255,.4);font-size:9px;display:block}
+td{
+  padding:8px 12px;border-bottom:1px solid var(--line-soft);
+  white-space:nowrap;max-width:240px;overflow:hidden;text-overflow:ellipsis;
+  color:var(--ink-soft);
+}
+tr:nth-child(even) td{background:#FBFCFD}
+td.empty{color:var(--faint);font-style:italic}
+.preview-foot{
+  padding:10px 14px;border-top:1px solid var(--line);
+  font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--faint);
+  display:flex;justify-content:space-between;
+}
 
-/* Table */
-.table-wrap{background:#fff;border-radius:10px;border:1px solid #e4e7ed;overflow:hidden}
-.tbl-scroll{overflow-x:auto;max-height:420px;overflow-y:auto}
-table{width:100%;border-collapse:collapse;font-size:12px}
-th{background:#1a3a5c;color:#fff;padding:9px 10px;text-align:left;font-size:11px;font-weight:600;white-space:nowrap;position:sticky;top:0}
-td{padding:6px 10px;border-bottom:1px solid #f3f4f6;vertical-align:middle;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-tr:hover td{background:#f8faff}
-.badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:600}
-.b-ok{background:#dcfce7;color:#166534}
-.b-err{background:#fee2e2;color:#991b1b}
-.b-warn{background:#fef3c7;color:#92400e}
-.b-info{background:#dbeafe;color:#1e40af}
-.b-purple{background:#ede9fe;color:#5b21b6}
+.error-note{
+  display:none;
+  background:#FDECEA;border:1px solid #F4C9C5;color:#8E2A22;
+  border-radius:10px;padding:14px 16px;font-size:13px;margin-top:20px;
+}
+.error-note.show{display:block}
 
-/* API modal */
-.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center}
-.modal-bg.open{display:flex}
-.modal{background:#fff;border-radius:12px;padding:24px;width:420px;max-width:90vw}
-.modal h2{font-size:16px;font-weight:700;margin-bottom:8px;color:#1a3a5c}
-.modal p{font-size:13px;color:#6b7280;margin-bottom:16px;line-height:1.6}
-.modal input{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;margin-bottom:12px;font-family:monospace}
-.modal input:focus{outline:2px solid #1a3a5c;border-color:transparent}
-.modal-actions{display:flex;gap:8px;justify-content:flex-end}
-.modal-actions button{padding:8px 18px;border-radius:8px;border:none;font-size:13px;font-weight:600;cursor:pointer}
-.btn-cancel{background:#f3f4f6;color:#374151}
-.btn-save{background:#1a3a5c;color:#fff}
-
-/* Log */
-.log{background:#1e1e2e;color:#cdd6f4;border-radius:8px;padding:10px 14px;font-family:monospace;font-size:11px;max-height:120px;overflow-y:auto}
-.log-ok{color:#a6e3a1}
-.log-warn{color:#f9e2af}
-.log-err{color:#f38ba8}
-.log-info{color:#89dceb}
-
-/* Empty state */
-.empty{text-align:center;padding:60px 20px;color:#9ca3af}
-.empty-icon{font-size:40px;margin-bottom:12px}
-.empty-title{font-size:15px;font-weight:600;color:#6b7280;margin-bottom:6px}
+@media(prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+}
+@media(max-width:560px){
+  .stat-value{font-size:24px}
+}
 </style>
 </head>
 <body>
 
-<!-- API Key Modal -->
-<div class="modal-bg" id="modal-bg">
-  <div class="modal">
-    <h2>Clé API Anthropic</h2>
-    <p>Votre clé reste dans votre navigateur et n'est jamais envoyée ailleurs que vers l'API Anthropic. Obtenez-la sur <a href="https://console.anthropic.com/" target="_blank">console.anthropic.com</a>.</p>
-    <input type="password" id="api-input" placeholder="sk-ant-api03-..." autocomplete="off">
-    <div class="modal-actions">
-      <button class="btn-cancel" onclick="closeModal()">Annuler</button>
-      <button class="btn-save" onclick="saveApiKey()">Enregistrer</button>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">HubSpot&nbsp;Cleaner</span>
+    <span class="brand-sub">Préparation des imports</span>
+  </div>
+  <span class="topbar-tag">v2 · étape 1</span>
+</header>
+
+<main class="shell">
+  <div class="eyebrow">Import</div>
+  <h1 class="page-title">Déposez un fichier à préparer</h1>
+  <p class="page-lede">Glissez votre export de contacts. Vous verrez immédiatement ce qu'il contient avant le nettoyage.</p>
+
+  <!-- Empty-state drop zone -->
+  <div class="dropzone" id="dropzone" tabindex="0" role="button"
+       aria-label="Déposer ou choisir un fichier">
+    <div class="dz-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 9 12 4 17 9"/><line x1="12" y1="4" x2="12" y2="16"/>
+      </svg>
+    </div>
+    <div class="dz-title">Glissez votre fichier ici</div>
+    <div class="dz-sub">ou cliquez pour le sélectionner</div>
+    <div class="dz-formats">
+      <span class="fmt">.xlsx</span><span class="fmt">.xls</span><span class="fmt">.csv</span>
     </div>
   </div>
-</div>
+  <input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none">
 
-<!-- Header -->
-<div class="header">
-  <div>
-    <div class="header-logo">Agent HubSpot Cleaner</div>
-    <div class="header-sub">Nettoyage &amp; enrichissement de contacts</div>
-  </div>
-  <button class="api-badge" id="api-btn" onclick="openModal()">Clé API ▾</button>
-</div>
-
-<div class="main">
-
-  <!-- Sidebar -->
-  <div class="sidebar">
-
-    <div>
-      <div class="sidebar-section">Fichier Excel</div>
-      <div class="drop-zone" id="drop-zone"
-        onclick="document.getElementById('file-input').click()"
-        ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
-        <div class="drop-icon">⬆</div>
-        <div class="drop-title">Déposez votre fichier</div>
-        <div class="drop-sub">.xlsx ou .xls acceptés</div>
-        <div class="drop-file" id="drop-file"></div>
-      </div>
-      <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none" onchange="onFileSelected(event)">
+  <!-- File bar -->
+  <div class="filebar" id="filebar">
+    <div class="fb-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+      </svg>
     </div>
-
-    <div>
-      <div class="sidebar-section">Règles actives</div>
-      <div id="rules-list"></div>
+    <div class="fb-meta">
+      <div class="fb-name" id="fb-name">—</div>
+      <div class="fb-detail" id="fb-detail">—</div>
     </div>
-
-    <div style="display:flex;flex-direction:column;gap:8px;margin-top:auto">
-      <button class="btn btn-primary" id="btn-analyze" onclick="runAnalysis()" disabled>▶ Analyser et nettoyer</button>
-      <button class="btn btn-enrich" id="btn-enrich" onclick="runEnrichment()" disabled>◈ Enrichir les SIRET</button>
-      <button class="btn btn-stop" id="btn-stop" onclick="stopEnrichment()" style="display:none">■ Arrêter</button>
-      <button class="btn btn-export" id="btn-export" onclick="exportExcel()" disabled>↓ Exporter le fichier</button>
-    </div>
-
+    <button class="fb-replace" id="fb-replace">Changer de fichier</button>
   </div>
 
-  <!-- Content -->
-  <div class="content">
+  <!-- Error -->
+  <div class="error-note" id="error-note"></div>
 
-    <!-- Metrics -->
-    <div class="metrics" id="metrics">
-      <div class="metric"><div class="metric-label">Contacts</div><div class="metric-value" id="m-total">—</div></div>
-      <div class="metric"><div class="metric-label">Entreprises</div><div class="metric-value blue" id="m-companies">—</div></div>
-      <div class="metric"><div class="metric-label">Propres</div><div class="metric-value green" id="m-clean">—</div></div>
-      <div class="metric"><div class="metric-label">Erreurs</div><div class="metric-value red" id="m-errors">—</div></div>
-      <div class="metric"><div class="metric-label">Alertes</div><div class="metric-value orange" id="m-warnings">—</div></div>
-      <div class="metric"><div class="metric-label">SIRET à enrichir</div><div class="metric-value purple" id="m-enrich">—</div></div>
-    </div>
+  <!-- Stats -->
+  <section class="stats" id="stats">
+    <div class="section-label">Aperçu du fichier</div>
+    <div class="grid" id="grid"></div>
 
-    <!-- Enrich progress (hidden by default) -->
-    <div id="enrich-block" style="display:none">
-      <div class="progress-wrap"><div class="progress-fill" id="enrich-progress" style="width:0%"></div></div>
-      <div class="progress-label" id="enrich-label">En attente...</div>
-      <div class="log" id="enrich-log"></div>
-    </div>
+    <div class="section-label">Colonnes détectées</div>
+    <div class="chips" id="chips"></div>
 
-    <!-- AI Summary -->
-    <div class="ai-box">
-      <div class="ai-box-title">✦ Analyse IA</div>
-      <div class="ai-text" id="ai-text"><span class="ai-placeholder">L'analyse apparaîtra ici après le traitement du fichier. Ajoutez votre clé API Anthropic pour activer cette fonctionnalité.</span></div>
-    </div>
-
-    <!-- Tabs + Table -->
-    <div>
-      <div class="tabs">
-        <div class="tab active" onclick="switchTab('tab-issues')">Lignes avec problèmes</div>
-        <div class="tab" onclick="switchTab('tab-all')">Tous les contacts</div>
-        <div class="tab" onclick="switchTab('tab-enrich-tab')">Enrichissement SIRET</div>
+    <div class="section-label">Aperçu des données <span style="margin-left:auto;text-transform:none;letter-spacing:0;font-family:Inter;font-size:11px;color:var(--faint)" id="preview-count"></span></div>
+    <div class="preview">
+      <div class="tbl-scroll">
+        <table id="preview-table"><thead></thead><tbody></tbody></table>
       </div>
-
-      <div id="tab-issues" class="tab-content" style="display:block">
-        <div class="table-wrap">
-          <div class="tbl-scroll">
-            <table id="tbl-issues">
-              <thead><tr>
-                <th>#</th><th>Prénom Nom</th><th>Entreprise</th><th>Email</th><th>Problèmes</th>
-              </tr></thead>
-              <tbody id="tbody-issues">
-                <tr><td colspan="5"><div class="empty"><div class="empty-icon">📂</div><div class="empty-title">Chargez un fichier pour commencer</div></div></td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <div id="tab-all" class="tab-content" style="display:none">
-        <div class="table-wrap">
-          <div class="tbl-scroll">
-            <table id="tbl-all">
-              <thead><tr>
-                <th>#</th><th>Prénom</th><th>Nom</th><th>Entreprise</th><th>Email principal</th><th>SIRET</th><th>Tél. portable</th><th>Statut</th>
-              </tr></thead>
-              <tbody id="tbody-all">
-                <tr><td colspan="8"><div class="empty"><div class="empty-icon">📂</div><div class="empty-title">Chargez un fichier pour commencer</div></div></td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <div id="tab-enrich-tab" class="tab-content" style="display:none">
-        <div class="table-wrap">
-          <div class="tbl-scroll">
-            <table>
-              <thead><tr>
-                <th>#</th><th>Entreprise source</th><th>CP</th><th>Ville</th><th>SIRET trouvé</th><th>Nom légal trouvé</th><th>Confiance</th><th>Stratégie</th><th>Statut</th>
-              </tr></thead>
-              <tbody id="tbody-enrich">
-                <tr><td colspan="9"><div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">Lancez l'analyse pour voir les lignes à enrichir</div></div></td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
+      <div class="preview-foot">
+        <span id="pf-left">—</span>
+        <span id="pf-right">—</span>
       </div>
     </div>
-
-  </div>
-</div>
+  </section>
+</main>
 
 <script>
-let processedResults = null;
-let stopFlag = false;
+// ============================================================
+//  Détection heuristique des colonnes (alignée sur les exports
+//  HubSpot / salons : Mail prospect, SIRET entreprise, etc.)
+// ============================================================
+const COLUMN_HINTS = [
+  { role:'EMAIL',      test:h => /mail|e-?mail|courriel/.test(h) },
+  { role:'ENTREPRISE', test:h => /entreprise|societe|company|raison.?social/.test(h) },
+  { role:'SIRET',      test:h => /siret|siren/.test(h) },
+  { role:'TEL',        test:h => /tel|phone|portable|mobile/.test(h) },
+  { role:'NOM',        test:h => /^nom$|^prenom$|nom complet/.test(h) },
+  { role:'ADRESSE',    test:h => /adresse|code.?postal|^cp$|ville/.test(h) },
+];
 
-// ---- API KEY ----
-function openModal() {
-  document.getElementById('api-input').value = CONFIG.ANTHROPIC_API_KEY || sessionStorage.getItem('hs_api_key') || '';
-  document.getElementById('modal-bg').classList.add('open');
-}
-function closeModal() { document.getElementById('modal-bg').classList.remove('open'); }
-function saveApiKey() {
-  const key = document.getElementById('api-input').value.trim();
-  CONFIG.ANTHROPIC_API_KEY = key;
-  sessionStorage.setItem('hs_api_key', key);
-  updateApiBadge();
-  closeModal();
-}
-function updateApiBadge() {
-  const btn = document.getElementById('api-btn');
-  const key = CONFIG.ANTHROPIC_API_KEY || sessionStorage.getItem('hs_api_key') || '';
-  CONFIG.ANTHROPIC_API_KEY = key;
-  if (key) { btn.textContent = 'Clé API ✓'; btn.className = 'api-badge ok'; }
-  else { btn.textContent = 'Clé API ▾'; btn.className = 'api-badge missing'; }
+const norm = s => (s||'').toString().toLowerCase()
+  .normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+
+function detectRole(header){
+  const h = norm(header);
+  for(const hint of COLUMN_HINTS){ if(hint.test(h)) return hint.role; }
+  return null;
 }
 
-// ---- FILE DROP ----
-function onDragOver(e) { e.preventDefault(); document.getElementById('drop-zone').classList.add('drag'); }
-function onDragLeave() { document.getElementById('drop-zone').classList.remove('drag'); }
-function onDrop(e) { e.preventDefault(); document.getElementById('drop-zone').classList.remove('drag'); loadFile(e.dataTransfer.files[0]); }
-function onFileSelected(e) { loadFile(e.target.files[0]); }
+// ============================================================
+//  État + éléments
+// ============================================================
+const el = id => document.getElementById(id);
+const dropzone = el('dropzone');
+const fileInput = el('file-input');
 
-let rawRows = [], filename = '';
-function loadFile(file) {
-  filename = file.name;
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('keydown', e => { if(e.key==='Enter'||e.key===' '){ e.preventDefault(); fileInput.click(); }});
+el('fb-replace').addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => { if(e.target.files[0]) loadFile(e.target.files[0]); });
+
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('drag');
+  if(e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+
+// ============================================================
+//  Lecture du fichier
+// ============================================================
+function loadFile(file){
+  hideError();
   const reader = new FileReader();
   reader.onload = e => {
-    const wb = XLSX.read(e.target.result, { type: 'binary' });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    rawRows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-    rawRows = rawRows.map(r => { const o = {}; Object.keys(r).forEach(k => { o[k] = r[k] === null || r[k] === undefined ? '' : String(r[k]); }); return o; });
-    document.getElementById('drop-file').textContent = file.name + ' — ' + rawRows.length + ' lignes';
-    document.getElementById('drop-zone').classList.add('loaded');
-    document.getElementById('btn-analyze').disabled = false;
-    processedResults = null;
-  };
-  reader.readAsBinaryString(file);
-}
-
-// ---- RULES LIST ----
-function renderRules() {
-  const el = document.getElementById('rules-list');
-  el.innerHTML = CONFIG.RULES.map((r, i) => `
-    <div class="rule-item">
-      <button class="rule-toggle ${r.enabled ? 'on' : 'off'}" onclick="toggleRule(${i})" title="${r.description || ''}"></button>
-      <span class="rule-label">${r.label}</span>
-      <span class="sev-${r.severity}">${r.severity.toUpperCase().slice(0,3)}</span>
-    </div>`).join('');
-}
-function toggleRule(i) {
-  CONFIG.RULES[i].enabled = !CONFIG.RULES[i].enabled;
-  renderRules();
-}
-
-// ---- ANALYSIS ----
-async function runAnalysis() {
-  if (!rawRows.length) return;
-  const { results, stats } = Agent.processAll(rawRows);
-  processedResults = results;
-
-  updateMetrics(stats);
-  renderIssuesTable(results);
-  renderAllTable(results);
-  renderEnrichTable(results);
-
-  document.getElementById('btn-enrich').disabled = stats.toEnrich === 0;
-  document.getElementById('btn-export').disabled = false;
-
-  document.getElementById('ai-text').textContent = 'Analyse en cours...';
-  const summary = await Agent.getAISummary(stats, filename);
-  document.getElementById('ai-text').textContent = summary || 'Ajoutez votre clé API Anthropic pour obtenir une synthèse IA.';
-}
-
-// ---- METRICS ----
-function updateMetrics(stats) {
-  document.getElementById('m-total').textContent = stats.total;
-  document.getElementById('m-companies').textContent = stats.companies;
-  document.getElementById('m-clean').textContent = stats.clean;
-  document.getElementById('m-errors').textContent = stats.errors;
-  document.getElementById('m-warnings').textContent = stats.warnings;
-  document.getElementById('m-enrich').textContent = stats.toEnrich;
-}
-
-// ---- TABLES ----
-function severityBadge(issues) {
-  if (!issues.length) return '<span class="badge b-ok">Propre</span>';
-  return issues.map(i => {
-    const cls = i.severity === 'error' ? 'b-err' : i.severity === 'warning' ? 'b-warn' : 'b-info';
-    return `<span class="badge ${cls}" title="${i.message}">${i.label}</span>`;
-  }).join(' ');
-}
-
-function renderIssuesTable(results) {
-  const problematic = results.filter(r => r.issues.length > 0);
-  const cols = CONFIG.COLUMNS;
-  const tbody = document.getElementById('tbody-issues');
-  if (!problematic.length) {
-    tbody.innerHTML = '<tr><td colspan="5"><div class="empty"><div class="empty-icon">✅</div><div class="empty-title">Aucun problème détecté !</div></div></td></tr>';
-    return;
-  }
-  tbody.innerHTML = problematic.map(r => `
-    <tr>
-      <td>${r.index + 1}</td>
-      <td>${r.cleaned[cols.firstname] || ''} ${r.cleaned[cols.lastname] || ''}</td>
-      <td title="${r.cleaned[cols.company] || ''}">${(r.cleaned[cols.company] || '').substring(0, 24)}</td>
-      <td>${r.cleaned['Email principal'] || '<span style="color:#dc2626">—</span>'}</td>
-      <td>${severityBadge(r.issues)}</td>
-    </tr>`).join('');
-}
-
-function renderAllTable(results) {
-  const cols = CONFIG.COLUMNS;
-  const tbody = document.getElementById('tbody-all');
-  tbody.innerHTML = results.map(r => {
-    const siret = r.cleaned[cols.siret] || '';
-    const siretBadge = siret === '[À enrichir]'
-      ? '<span class="badge b-purple">À enrichir</span>'
-      : siret ? `<span class="badge b-ok">${siret}</span>` : '<span class="badge b-err">Manquant</span>';
-    const status = r.issues.length === 0
-      ? '<span class="badge b-ok">Propre</span>'
-      : r.issues.some(i => i.severity === 'error')
-        ? '<span class="badge b-err">Erreur</span>'
-        : '<span class="badge b-warn">Alerte</span>';
-    return `<tr>
-      <td>${r.index + 1}</td>
-      <td>${r.cleaned[cols.firstname] || ''}</td>
-      <td>${r.cleaned[cols.lastname] || ''}</td>
-      <td title="${r.cleaned[cols.company] || ''}">${(r.cleaned[cols.company] || '').substring(0, 20)}</td>
-      <td>${r.cleaned['Email principal'] || ''}</td>
-      <td id="allsiret-${r.index}">${siretBadge}</td>
-      <td>${r.cleaned[cols.phone_mobile] || ''}</td>
-      <td>${status}</td>
-    </tr>`;
-  }).join('');
-}
-
-function renderEnrichTable(results) {
-  const cols = CONFIG.COLUMNS;
-  const toEnrich = results.filter(r => r.cleaned[cols.siret] === '[À enrichir]');
-  const tbody = document.getElementById('tbody-enrich');
-  if (!toEnrich.length) {
-    tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="empty-icon">✅</div><div class="empty-title">Tous les SIRET sont déjà renseignés</div></div></td></tr>';
-    return;
-  }
-  tbody.innerHTML = toEnrich.map(r => `
-    <tr id="erow-${r.index}">
-      <td>${r.index + 1}</td>
-      <td title="${r.cleaned[cols.company] || ''}">${(r.cleaned[cols.company] || '').substring(0, 22)}</td>
-      <td>${r.cleaned[cols.zip] || ''}</td>
-      <td title="${r.cleaned[cols.city] || ''}">${(r.cleaned[cols.city] || '').substring(0, 16)}</td>
-      <td id="esiret-${r.index}">—</td>
-      <td id="enom-${r.index}" style="color:#6b7280">—</td>
-      <td id="econf-${r.index}">—</td>
-      <td id="estrat-${r.index}" style="font-size:10px;color:#9ca3af">—</td>
-      <td id="estatus-${r.index}"><span class="badge b-warn">En attente</span></td>
-    </tr>`).join('');
-}
-
-// ---- ENRICHMENT ----
-async function runEnrichment() {
-  if (!processedResults) return;
-  stopFlag = false;
-  document.getElementById('btn-enrich').disabled = true;
-  document.getElementById('btn-stop').style.display = 'block';
-  document.getElementById('enrich-block').style.display = 'block';
-  switchTab('tab-enrich-tab');
-
-  const log = document.getElementById('enrich-log');
-  function addLog(msg, type) {
-    const d = document.createElement('div');
-    d.className = 'log-' + (type || 'info');
-    d.textContent = new Date().toLocaleTimeString() + ' | ' + msg;
-    log.appendChild(d);
-    log.scrollTop = log.scrollHeight;
-  }
-
-  let found = 0, notFound = 0;
-  addLog('Démarrage enrichissement SIRET via API Sirene...', 'info');
-
-  await Siret.enrichAll(processedResults, {
-    shouldStop: () => stopFlag,
-    onProgress: (done, total) => {
-      const pct = Math.round(done / total * 100);
-      document.getElementById('enrich-progress').style.width = pct + '%';
-      document.getElementById('enrich-label').textContent = done + ' / ' + total + ' traités (' + pct + '%)';
-    },
-    onResult: (row, result) => {
-      if (result.siret) {
-        found++;
-        const confColor = result.confidence >= 70 ? '#16a34a' : result.confidence >= 50 ? '#d97706' : '#dc2626';
-        document.getElementById('esiret-' + row.index).innerHTML = `<span class="badge b-ok">${result.siret}</span>`;
-        document.getElementById('enom-' + row.index).textContent = (result.nomLegal || '').substring(0, 24);
-        document.getElementById('econf-' + row.index).innerHTML = `<span style="font-weight:600;color:${confColor}">${result.confidence}%</span>`;
-        document.getElementById('estrat-' + row.index).textContent = result.strategy || '';
-        document.getElementById('estatus-' + row.index).innerHTML = '<span class="badge b-ok">Trouvé</span>';
-        const allCell = document.getElementById('allsiret-' + row.index);
-        if (allCell) allCell.innerHTML = `<span class="badge b-ok">${result.siret}</span>`;
-        addLog('✓ ' + (row.cleaned[CONFIG.COLUMNS.company] || '?') + ' → ' + result.siret + ' "' + (result.nomLegal || '') + '" confiance ' + result.confidence + '% [' + (result.strategy || '') + ']', 'ok');
-      } else {
-        notFound++;
-        document.getElementById('esiret-' + row.index).textContent = '—';
-        document.getElementById('estatus-' + row.index).innerHTML = '<span class="badge b-err">Non trouvé</span>';
-        addLog('✗ ' + (row.cleaned[CONFIG.COLUMNS.company] || '?') + ' (' + (row.cleaned[CONFIG.COLUMNS.zip] || '') + ') — ' + result.source, 'warn');
-      }
-      const remaining = processedResults.filter(r => r.cleaned[CONFIG.COLUMNS.siret] === '[À enrichir]').length;
-      document.getElementById('m-enrich').textContent = remaining;
+    try{
+      const wb = XLSX.read(e.target.result, { type:'array' });
+      const sheetName = wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval:'' });
+      if(!rows.length){ showError("Le fichier semble vide ou ne contient pas d'en-têtes lisibles."); return; }
+      render(file, sheetName, rows);
+    }catch(err){
+      showError("Impossible de lire ce fichier. Vérifiez qu'il s'agit bien d'un .xlsx, .xls ou .csv valide.");
     }
+  };
+  reader.onerror = () => showError("Erreur de lecture du fichier.");
+  reader.readAsArrayBuffer(file);
+}
+
+// ============================================================
+//  Calcul des statistiques + rendu
+// ============================================================
+function render(file, sheetName, rows){
+  // Ignore les colonnes fantômes (en-tête vide ou auto-nommée __EMPTY par SheetJS)
+  const headers = Object.keys(rows[0]).filter(h => h && !/^__EMPTY/.test(h));
+  const roles = {};
+  headers.forEach(h => { const r = detectRole(h); if(r) (roles[r] = roles[r] || []).push(h); });
+
+  const val = (row, cols) => (cols||[]).map(c => (row[c]||'').toString().trim()).find(v => v) || '';
+  const isEmptyRow = row => headers.every(h => (row[h]||'').toString().trim()==='');
+
+  // Beaucoup d'exports sont « gonflés » de lignes blanches : on raisonne
+  // sur les lignes réellement remplies pour des pourcentages honnêtes.
+  const fullRows = rows.filter(r => !isEmptyRow(r));
+  const emptyRows = rows.length - fullRows.length;
+  const base = fullRows.length || 1;
+
+  // Cellules remplies (complétude, sur les lignes utiles)
+  let filled = 0;
+  fullRows.forEach(row => headers.forEach(h => { if((row[h]||'').toString().trim()!=='') filled++; }));
+  const totalCells = fullRows.length * headers.length;
+  const completeness = totalCells ? Math.round(filled/totalCells*100) : 0;
+
+  const withEmail = roles.EMAIL ? fullRows.filter(r => val(r, roles.EMAIL)).length : null;
+  const withSiret = roles.SIRET
+    ? fullRows.filter(r => /^\d{14}$/.test(siretDigits(val(r, roles.SIRET)))).length : null;
+  const uniqueCompanies = roles.ENTREPRISE
+    ? new Set(fullRows.map(r => val(r, roles.ENTREPRISE)).filter(Boolean)).size : null;
+
+  // ---- File bar ----
+  el('fb-name').textContent = file.name;
+  el('fb-detail').textContent =
+    `${formatSize(file.size)} · feuille « ${sheetName} » · ${formatFr(fullRows.length)} lignes utiles × ${headers.length} colonnes`;
+  el('filebar').classList.add('show');
+  dropzone.classList.add('loaded');
+
+  // ---- Stat cards ----
+  const cards = [
+    { label:'Lignes utiles',       value:fullRows.length,    cls:'',
+      foot: emptyRows ? `sur ${formatFr(rows.length)} au total` : null },
+    { label:'Colonnes',            value:headers.length,     cls:'' },
+    { label:'Contacts avec email', value:withEmail,          cls:'accent',
+      foot: withEmail!=null ? pct(withEmail, base)+' des lignes utiles' : 'colonne email non détectée' },
+    { label:'Entreprises uniques', value:uniqueCompanies,    cls:'',
+      foot: uniqueCompanies!=null ? null : 'colonne entreprise non détectée' },
+    { label:'SIRET renseignés',    value:withSiret,          cls:'',
+      foot: withSiret!=null ? formatFr(base-withSiret)+' à enrichir' : 'colonne SIRET non détectée' },
+    { label:'Lignes vides',        value:emptyRows,          cls: emptyRows ? 'warn':'',
+      foot: emptyRows ? 'seront ignorées' : 'aucune' },
+  ];
+
+  el('grid').innerHTML = cards.map(c => {
+    if(c.value==null){
+      return `<div class="stat"><div class="stat-label">${c.label}</div>
+        <div class="stat-value" style="color:var(--faint)">—</div>
+        <div class="stat-foot">${c.foot||'non disponible'}</div></div>`;
+    }
+    return `<div class="stat ${c.cls}">
+      <div class="stat-label">${c.label}</div>
+      <div class="stat-value" data-count="${c.value}">0</div>
+      ${c.foot ? `<div class="stat-foot">${c.foot}</div>`:''}
+    </div>`;
+  }).join('');
+
+  // Carte complétude (barre)
+  el('grid').insertAdjacentHTML('beforeend', `
+    <div class="stat" style="grid-column:span 2">
+      <div class="stat-label">Complétude des données</div>
+      <div class="stat-value" data-count="${completeness}">0<span class="unit">%</span></div>
+      <div class="bar-track"><div class="bar-fill" id="bar-fill"></div></div>
+      <div class="stat-foot">${formatFr(filled)} cellules remplies sur ${formatFr(totalCells)}</div>
+    </div>`);
+
+  el('stats').classList.add('show');
+  animateCounts();
+  requestAnimationFrame(() => { const b = el('bar-fill'); if(b) b.style.width = completeness+'%'; });
+
+  // ---- Chips colonnes ----
+  el('chips').innerHTML = headers.map(h => {
+    const role = detectRole(h);
+    return `<span class="chip ${role?'known':''}">
+      <span class="dot"></span>${escapeHtml(h)}${role?`<span class="role">${role}</span>`:''}
+    </span>`;
+  }).join('');
+
+  // ---- Aperçu données ----
+  const PREVIEW = 8;
+  const slice = fullRows.slice(0, PREVIEW);
+  el('preview-table').querySelector('thead').innerHTML =
+    '<tr><th><span class="idx">#</span></th>' +
+    headers.map((h,i) => `<th class="${detectRole(h)?'known':''}"><span class="idx">${String(i+1).padStart(2,'0')}</span>${escapeHtml(h)}</th>`).join('') +
+    '</tr>';
+  el('preview-table').querySelector('tbody').innerHTML = slice.map((row,i) =>
+    `<tr><td style="color:var(--faint);font-family:JetBrains Mono,monospace">${i+1}</td>` +
+    headers.map(h => {
+      const v = (row[h]||'').toString().trim();
+      return v ? `<td title="${escapeHtml(v)}">${escapeHtml(v)}</td>` : '<td class="empty">vide</td>';
+    }).join('') + '</tr>').join('');
+
+  el('preview-count').textContent = `${Math.min(PREVIEW, fullRows.length)} premières lignes utiles`;
+  el('pf-left').textContent = `${headers.length} colonnes`;
+  el('pf-right').textContent = `${formatFr(fullRows.length)} lignes utiles`;
+}
+
+// ============================================================
+//  Helpers
+// ============================================================
+function animateCounts(){
+  const reduce = window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+  document.querySelectorAll('.stat-value[data-count]').forEach(node => {
+    const target = +node.dataset.count;
+    const unit = node.querySelector('.unit');
+    const unitHtml = unit ? unit.outerHTML : '';
+    if(reduce){ node.innerHTML = formatFr(target)+unitHtml; return; }
+    const dur = 650, t0 = performance.now();
+    (function step(now){
+      const p = Math.min((now-t0)/dur, 1);
+      const eased = 1-Math.pow(1-p,3);
+      node.innerHTML = formatFr(Math.round(target*eased))+unitHtml;
+      if(p<1) requestAnimationFrame(step);
+    })(t0);
   });
-
-  addLog('Terminé. ' + found + ' SIRET trouvés, ' + notFound + ' non trouvés.', 'ok');
-  document.getElementById('btn-stop').style.display = 'none';
-  document.getElementById('btn-enrich').disabled = false;
 }
-
-function stopEnrichment() {
-  stopFlag = true;
-  document.getElementById('btn-stop').style.display = 'none';
-  document.getElementById('btn-enrich').disabled = false;
+function formatFr(n){ return Number(n).toLocaleString('fr-FR'); }
+// SIRET souvent stocké en nombre / notation scientifique par Excel (3.81E13)
+function siretDigits(v){
+  let s = (v||'').toString().trim().replace(/\s/g,'');
+  if(/e/i.test(s) || s.includes('.')){
+    const n = Number(s);
+    if(isFinite(n)) s = Math.round(n).toString();
+  }
+  return s;
 }
-
-// ---- EXPORT ----
-function exportExcel() {
-  if (!processedResults) return;
-  const exportCols = CONFIG.EXPORT_COLUMNS;
-  const data = [exportCols, ...processedResults.map(r =>
-    exportCols.map(c => r.cleaned[c] || '')
-  )];
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = exportCols.map(() => ({ wch: 22 }));
-  XLSX.utils.book_append_sheet(wb, ws, 'HubSpot Contacts');
-  const date = new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(wb, 'hubspot_clean_' + date + '.xlsx');
+function pct(a,b){ return b ? Math.round(a/b*100)+'%' : '0%'; }
+function formatSize(bytes){
+  if(bytes<1024) return bytes+' o';
+  if(bytes<1024*1024) return (bytes/1024).toFixed(0)+' Ko';
+  return (bytes/1024/1024).toFixed(1)+' Mo';
 }
-
-// ---- TABS ----
-function switchTab(id) {
-  document.querySelectorAll('.tab').forEach((t, i) => {
-    t.classList.toggle('active', ['tab-issues', 'tab-all', 'tab-enrich-tab'][i] === id);
-  });
-  document.querySelectorAll('.tab-content').forEach(p => {
-    p.style.display = p.id === id ? 'block' : 'none';
-  });
+function escapeHtml(s){
+  return (s||'').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 }
-
-// ---- INIT ----
-updateApiBadge();
-renderRules();
+function showError(msg){ const n=el('error-note'); n.textContent=msg; n.classList.add('show'); }
+function hideError(){ el('error-note').classList.remove('show'); }
 </script>
 </body>
 </html>
