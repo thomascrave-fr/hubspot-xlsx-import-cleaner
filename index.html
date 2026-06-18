@@ -10,382 +10,271 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --ink:#14233A;
-  --ink-soft:#2A3A52;
-  --paper:#F5F7FA;
-  --surface:#FFFFFF;
-  --line:#E4E8EF;
-  --line-soft:#EDF0F5;
-  --muted:#6B7686;
-  --faint:#9AA4B2;
-  --jade:#0E9E78;
-  --jade-deep:#0B7A5D;
-  --jade-soft:#E7F6F0;
-  --amber:#C77A12;
-  --red:#D6453C;
-  --blue:#2F6BD6;
+  --ink:#14233A; --ink-soft:#2A3A52;
+  --paper:#F5F7FA; --surface:#FFFFFF;
+  --line:#E4E8EF; --line-soft:#EDF0F5;
+  --muted:#6B7686; --faint:#9AA4B2;
+  --jade:#0E9E78; --jade-deep:#0B7A5D; --jade-soft:#E7F6F0;
+  --amber:#C77A12; --amber-soft:#FBF1E0;
+  --red:#D6453C; --blue:#2F6BD6;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-text-size-adjust:100%}
 body{
-  font-family:'Inter',system-ui,sans-serif;
-  background:var(--paper);
-  color:var(--ink);
-  font-size:14px;
-  line-height:1.5;
-  min-height:100vh;
-  /* fine grid texture — the "instrument" surface */
-  background-image:
-    linear-gradient(var(--line-soft) 1px,transparent 1px),
-    linear-gradient(90deg,var(--line-soft) 1px,transparent 1px);
-  background-size:48px 48px;
-  background-position:-1px -1px;
+  font-family:'Inter',system-ui,sans-serif;background:var(--paper);color:var(--ink);
+  font-size:14px;line-height:1.5;min-height:100vh;
+  background-image:linear-gradient(var(--line-soft) 1px,transparent 1px),linear-gradient(90deg,var(--line-soft) 1px,transparent 1px);
+  background-size:48px 48px;background-position:-1px -1px;
 }
 
-/* ---------- Header ---------- */
-.topbar{
-  background:var(--ink);
-  color:#fff;
-  height:60px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding:0 clamp(16px,4vw,40px);
-  border-bottom:3px solid var(--jade);
-}
-.brand{display:flex;align-items:baseline;gap:12px}
-.brand-mark{
-  font-family:'Space Grotesk',sans-serif;
-  font-weight:700;
-  font-size:17px;
-  letter-spacing:-.01em;
-}
+/* Header */
+.topbar{background:var(--ink);color:#fff;height:60px;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(16px,4vw,40px);border-bottom:3px solid var(--jade)}
+.brand{display:flex;align-items:baseline;gap:12px;cursor:pointer}
+.brand-mark{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;letter-spacing:-.01em}
 .brand-sub{font-size:11px;color:rgba(255,255,255,.55);letter-spacing:.04em}
-.topbar-tag{
-  font-family:'JetBrains Mono',monospace;
-  font-size:10px;
-  text-transform:uppercase;
-  letter-spacing:.12em;
-  color:rgba(255,255,255,.45);
-  border:1px solid rgba(255,255,255,.18);
-  padding:5px 10px;
-  border-radius:4px;
-}
+.topbar-tag{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.45);border:1px solid rgba(255,255,255,.18);padding:5px 10px;border-radius:4px}
+.nav-home{display:none;align-items:center;gap:7px;font-size:12px;font-weight:600;color:#fff;background:transparent;border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:7px 13px;cursor:pointer}
+.nav-home:hover{border-color:var(--jade);color:#9BE6CC}
+.nav-home.show{display:inline-flex}
 
-/* ---------- Shell ---------- */
-.shell{
-  max-width:1080px;
-  margin:0 auto;
-  padding:clamp(24px,5vw,52px) clamp(16px,4vw,40px) 64px;
-}
+.shell{max-width:1180px;margin:0 auto;padding:clamp(24px,5vw,48px) clamp(16px,4vw,40px) 64px}
+.eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--jade-deep);margin-bottom:10px}
+.page-title{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:clamp(24px,4vw,32px);letter-spacing:-.02em;line-height:1.1;margin-bottom:8px}
+.page-lede{color:var(--muted);max-width:52ch;margin-bottom:28px}
 
-.eyebrow{
-  font-family:'JetBrains Mono',monospace;
-  font-size:11px;
-  letter-spacing:.16em;
-  text-transform:uppercase;
-  color:var(--jade-deep);
-  margin-bottom:10px;
-}
-.page-title{
-  font-family:'Space Grotesk',sans-serif;
-  font-weight:600;
-  font-size:clamp(24px,4vw,32px);
-  letter-spacing:-.02em;
-  line-height:1.1;
-  margin-bottom:8px;
-}
-.page-lede{color:var(--muted);max-width:46ch;margin-bottom:28px}
+.view{display:none}
+.view.show{display:block;animation:fade .35s ease}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
-/* ---------- Drop zone ---------- */
-.dropzone{
-  position:relative;
-  background:var(--surface);
-  border:1.5px dashed #C3CBD8;
-  border-radius:14px;
-  padding:clamp(36px,7vw,64px) 24px;
-  text-align:center;
-  cursor:pointer;
-  transition:border-color .18s,background .18s,transform .18s;
-  outline:none;
-}
+/* Drop zone */
+.dropzone{position:relative;background:var(--surface);border:1.5px dashed #C3CBD8;border-radius:14px;padding:clamp(30px,6vw,52px) 24px;text-align:center;cursor:pointer;transition:border-color .18s,background .18s,transform .18s;outline:none}
 .dropzone:hover{border-color:var(--jade);background:#FCFEFD}
 .dropzone:focus-visible{border-color:var(--jade);box-shadow:0 0 0 4px var(--jade-soft)}
 .dropzone.drag{border-color:var(--jade);border-style:solid;background:var(--jade-soft);transform:scale(.995)}
-.dropzone.loaded{display:none}
-.dz-icon{
-  width:52px;height:52px;margin:0 auto 18px;
-  display:grid;place-items:center;
-  border-radius:13px;
-  background:var(--jade-soft);
-  color:var(--jade-deep);
-}
+.dz-icon{width:52px;height:52px;margin:0 auto 18px;display:grid;place-items:center;border-radius:13px;background:var(--jade-soft);color:var(--jade-deep)}
 .dz-icon svg{width:26px;height:26px}
 .dz-title{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:17px;margin-bottom:6px}
 .dz-sub{color:var(--muted);font-size:13px}
-.dz-formats{
-  margin-top:18px;
-  display:inline-flex;gap:7px;flex-wrap:wrap;justify-content:center;
-}
-.fmt{
-  font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;
-  letter-spacing:.04em;color:var(--muted);
-  background:var(--paper);border:1px solid var(--line);
-  padding:3px 9px;border-radius:5px;
-}
+.dz-formats{margin-top:18px;display:inline-flex;gap:7px;flex-wrap:wrap;justify-content:center}
+.fmt{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--muted);background:var(--paper);border:1px solid var(--line);padding:3px 9px;border-radius:5px}
 
-/* ---------- File bar (after load) ---------- */
-.filebar{
-  display:none;
-  align-items:center;
-  gap:16px;
-  background:var(--surface);
-  border:1px solid var(--line);
-  border-left:4px solid var(--jade);
-  border-radius:11px;
-  padding:14px 18px;
-  margin-bottom:22px;
-}
+/* Section label */
+.section-label{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);display:flex;align-items:center;gap:10px;margin:36px 0 14px}
+.section-label::after{content:'';flex:1;height:1px;background:var(--line)}
+
+/* History list */
+.files{display:flex;flex-direction:column;gap:10px}
+.file-row{display:flex;align-items:center;gap:16px;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:14px 18px}
+.file-row .fr-icon{width:40px;height:40px;flex-shrink:0;display:grid;place-items:center;border-radius:9px;background:var(--jade-soft);color:var(--jade-deep)}
+.file-row .fr-icon svg{width:20px;height:20px}
+.fr-meta{min-width:0;flex:1}
+.fr-name{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fr-detail{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--faint);margin-top:3px}
+.fr-actions{display:flex;gap:8px;flex-shrink:0}
+.btn-ghost{font-size:12px;font-weight:600;border-radius:8px;padding:8px 13px;cursor:pointer;border:1px solid var(--line);background:transparent;transition:border-color .15s,background .15s,color .15s}
+.btn-dl{color:var(--jade-deep)}
+.btn-dl:hover{border-color:var(--jade);background:var(--jade-soft)}
+.btn-del{color:var(--muted)}
+.btn-del:hover{border-color:var(--red);color:var(--red);background:#FDECEA}
+.files-empty{background:var(--surface);border:1px dashed var(--line);border-radius:11px;padding:32px 20px;text-align:center;color:var(--faint);font-size:13px}
+
+/* File bar */
+.filebar{display:none;align-items:center;gap:16px;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--jade);border-radius:11px;padding:14px 18px;margin-bottom:22px}
 .filebar.show{display:flex}
-.fb-icon{
-  width:40px;height:40px;flex-shrink:0;
-  display:grid;place-items:center;border-radius:9px;
-  background:var(--jade-soft);color:var(--jade-deep);
-}
+.fb-icon{width:40px;height:40px;flex-shrink:0;display:grid;place-items:center;border-radius:9px;background:var(--jade-soft);color:var(--jade-deep)}
 .fb-icon svg{width:20px;height:20px}
 .fb-meta{min-width:0;flex:1}
 .fb-name{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.fb-detail{
-  font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--faint);
-  margin-top:3px;letter-spacing:.02em;
-}
-.fb-replace{
-  flex-shrink:0;
-  font-family:'Inter',sans-serif;font-size:12px;font-weight:600;
-  color:var(--jade-deep);background:transparent;
-  border:1px solid var(--line);border-radius:8px;
-  padding:8px 14px;cursor:pointer;transition:border-color .15s,background .15s;
-}
+.fb-detail{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--faint);margin-top:3px;letter-spacing:.02em}
+.fb-replace{flex-shrink:0;font-size:12px;font-weight:600;color:var(--jade-deep);background:transparent;border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer}
 .fb-replace:hover{border-color:var(--jade);background:var(--jade-soft)}
 
-/* ---------- Stats ---------- */
-.stats{display:none}
-.stats.show{display:block;animation:fade .4s ease}
-@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-
-.section-label{
-  font-family:'JetBrains Mono',monospace;
-  font-size:11px;letter-spacing:.14em;text-transform:uppercase;
-  color:var(--faint);
-  display:flex;align-items:center;gap:10px;
-  margin:0 0 14px;
-}
-.section-label::after{content:'';flex:1;height:1px;background:var(--line)}
-
-.grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
-  gap:12px;
-  margin-bottom:30px;
-}
-.stat{
-  background:var(--surface);
-  border:1px solid var(--line);
-  border-radius:11px;
-  padding:16px 18px;
-}
-.stat-label{
-  font-size:11px;letter-spacing:.05em;text-transform:uppercase;
-  color:var(--muted);margin-bottom:10px;font-weight:600;
-}
-.stat-value{
-  font-family:'JetBrains Mono',monospace;
-  font-weight:700;font-size:30px;line-height:1;
-  letter-spacing:-.02em;
-  font-variant-numeric:tabular-nums;
-  color:var(--ink);
-}
+/* Stats */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:8px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:16px 18px}
+.stat-label{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;font-weight:600}
+.stat-value{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:30px;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:var(--ink)}
 .stat-value .unit{font-size:14px;color:var(--faint);font-weight:600;margin-left:2px}
 .stat-foot{font-size:11px;color:var(--faint);margin-top:8px}
-.stat-foot strong{color:var(--jade-deep);font-weight:600}
 .stat.accent .stat-value{color:var(--jade-deep)}
 .stat.warn .stat-value{color:var(--amber)}
-
-/* completeness bar */
 .bar-track{height:6px;border-radius:99px;background:var(--line-soft);overflow:hidden;margin-top:10px}
 .bar-fill{height:100%;border-radius:99px;background:var(--jade);width:0;transition:width .8s cubic-bezier(.2,.7,.2,1)}
 
-/* ---------- Detected columns ---------- */
-.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:30px}
-.chip{
-  display:inline-flex;align-items:center;gap:7px;
-  background:var(--surface);border:1px solid var(--line);
-  border-radius:8px;padding:6px 11px;font-size:12px;
-}
-.chip .dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex-shrink:0}
-.chip.known{border-color:#C9E8DC;background:var(--jade-soft)}
-.chip.known .dot{background:var(--jade)}
-.chip .role{
-  font-family:'JetBrains Mono',monospace;font-size:9px;
-  letter-spacing:.06em;text-transform:uppercase;color:var(--jade-deep);
-  background:#fff;border:1px solid #C9E8DC;border-radius:4px;padding:1px 5px;
-}
+/* Action bar */
+.actionbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:8px 0 4px}
+.btn-action{display:inline-flex;align-items:center;gap:9px;font-family:'Inter',sans-serif;font-size:14px;font-weight:600;border:none;border-radius:10px;padding:13px 22px;cursor:pointer;transition:opacity .15s,transform .05s}
+.btn-action:active{transform:translateY(1px)}
+.btn-action:disabled{opacity:.45;cursor:not-allowed}
+.btn-enrich{background:var(--jade);color:#fff}
+.btn-enrich:hover:not(:disabled){background:var(--jade-deep)}
+.btn-export{background:var(--ink);color:#fff}
+.btn-export:hover:not(:disabled){background:#0d1a2c}
+.btn-stop{background:var(--red);color:#fff;display:none}
+.btn-action svg{width:17px;height:17px}
 
-/* ---------- Preview table ---------- */
-.preview{
-  background:var(--surface);border:1px solid var(--line);
-  border-radius:11px;overflow:hidden;
-}
-.tbl-scroll{overflow-x:auto;max-height:380px;overflow-y:auto}
+/* Progress / log */
+.enrich-block{display:none;margin:18px 0 4px}
+.enrich-block.show{display:block}
+.progress-wrap{background:var(--line-soft);border-radius:99px;height:7px;overflow:hidden}
+.progress-fill{height:7px;border-radius:99px;background:var(--jade);width:0;transition:width .3s}
+.progress-label{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);margin-top:8px}
+.log{margin-top:12px;background:#101826;color:#cdd6f4;border-radius:10px;padding:12px 15px;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.7;max-height:160px;overflow-y:auto}
+.log-ok{color:#9be6cc}.log-warn{color:#f4cf86}.log-info{color:#8fb8f0}
+
+/* Big preview */
+.preview{background:var(--surface);border:1px solid var(--line);border-radius:11px;overflow:hidden}
+.tbl-scroll{overflow:auto;max-height:62vh}
 table{border-collapse:collapse;width:100%;font-size:12.5px}
-th{
-  position:sticky;top:0;
-  background:var(--ink);color:#fff;
-  text-align:left;font-weight:600;font-size:11px;
-  letter-spacing:.02em;white-space:nowrap;
-  padding:10px 12px;
-}
+th{position:sticky;top:0;z-index:1;background:var(--ink);color:#fff;text-align:left;font-weight:600;font-size:11px;letter-spacing:.02em;white-space:nowrap;padding:11px 13px}
 th.known{color:#9BE6CC}
 th .idx{font-family:'JetBrains Mono',monospace;color:rgba(255,255,255,.4);font-size:9px;display:block}
-td{
-  padding:8px 12px;border-bottom:1px solid var(--line-soft);
-  white-space:nowrap;max-width:240px;overflow:hidden;text-overflow:ellipsis;
-  color:var(--ink-soft);
-}
+td{padding:8px 13px;border-bottom:1px solid var(--line-soft);white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis;color:var(--ink-soft)}
 tr:nth-child(even) td{background:#FBFCFD}
 td.empty{color:var(--faint);font-style:italic}
-.preview-foot{
-  padding:10px 14px;border-top:1px solid var(--line);
-  font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--faint);
-  display:flex;justify-content:space-between;
-}
+td.filled{background:var(--jade-soft)!important;color:var(--jade-deep);font-weight:600}
+.preview-foot{padding:10px 14px;border-top:1px solid var(--line);font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--faint);display:flex;justify-content:space-between}
 
-.error-note{
-  display:none;
-  background:#FDECEA;border:1px solid #F4C9C5;color:#8E2A22;
-  border-radius:10px;padding:14px 16px;font-size:13px;margin-top:20px;
-}
+.error-note{display:none;background:#FDECEA;border:1px solid #F4C9C5;color:#8E2A22;border-radius:10px;padding:14px 16px;font-size:13px;margin-top:20px}
 .error-note.show{display:block}
 
-@media(prefers-reduced-motion:reduce){
-  *{animation:none!important;transition:none!important}
-}
-@media(max-width:560px){
-  .stat-value{font-size:24px}
-}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media(max-width:560px){.stat-value{font-size:24px}.fr-actions .btn-ghost{padding:8px 10px}}
 </style>
 </head>
 <body>
 
 <header class="topbar">
-  <div class="brand">
+  <div class="brand" id="brand">
     <span class="brand-mark">HubSpot&nbsp;Cleaner</span>
     <span class="brand-sub">Préparation des imports</span>
   </div>
-  <span class="topbar-tag">v2 · étape 1</span>
+  <button class="nav-home" id="nav-home">← Accueil</button>
+  <span class="topbar-tag" id="topbar-tag">v2</span>
 </header>
 
+<input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none">
+
 <main class="shell">
-  <div class="eyebrow">Import</div>
-  <h1 class="page-title">Déposez un fichier à préparer</h1>
-  <p class="page-lede">Glissez votre export de contacts. Vous verrez immédiatement ce qu'il contient avant le nettoyage.</p>
 
-  <!-- Empty-state drop zone -->
-  <div class="dropzone" id="dropzone" tabindex="0" role="button"
-       aria-label="Déposer ou choisir un fichier">
-    <div class="dz-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-        <polyline points="7 9 12 4 17 9"/><line x1="12" y1="4" x2="12" y2="16"/>
-      </svg>
-    </div>
-    <div class="dz-title">Glissez votre fichier ici</div>
-    <div class="dz-sub">ou cliquez pour le sélectionner</div>
-    <div class="dz-formats">
-      <span class="fmt">.xlsx</span><span class="fmt">.xls</span><span class="fmt">.csv</span>
-    </div>
-  </div>
-  <input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none">
+  <!-- ====================== ACCUEIL ====================== -->
+  <section class="view show" id="view-home">
+    <div class="eyebrow">Espace de travail</div>
+    <h1 class="page-title">Nettoyez vos fichiers avant import</h1>
+    <p class="page-lede">Déposez un export de contacts pour l'analyser et l'enrichir. Retrouvez plus bas tous vos fichiers déjà nettoyés.</p>
 
-  <!-- File bar -->
-  <div class="filebar" id="filebar">
-    <div class="fb-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-      </svg>
+    <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Déposer ou choisir un fichier">
+      <div class="dz-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 9 12 4 17 9"/><line x1="12" y1="4" x2="12" y2="16"/></svg>
+      </div>
+      <div class="dz-title">Glissez votre fichier ici</div>
+      <div class="dz-sub">ou cliquez pour le sélectionner</div>
+      <div class="dz-formats"><span class="fmt">.xlsx</span><span class="fmt">.xls</span><span class="fmt">.csv</span></div>
     </div>
-    <div class="fb-meta">
-      <div class="fb-name" id="fb-name">—</div>
-      <div class="fb-detail" id="fb-detail">—</div>
+
+    <div class="section-label">Fichiers nettoyés</div>
+    <div id="files-host"></div>
+  </section>
+
+  <!-- ====================== WORKSPACE ====================== -->
+  <section class="view" id="view-workspace">
+    <div class="filebar show" id="filebar">
+      <div class="fb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+      <div class="fb-meta"><div class="fb-name" id="fb-name">—</div><div class="fb-detail" id="fb-detail">—</div></div>
+      <button class="fb-replace" id="fb-replace">Changer de fichier</button>
     </div>
-    <button class="fb-replace" id="fb-replace">Changer de fichier</button>
-  </div>
 
-  <!-- Error -->
-  <div class="error-note" id="error-note"></div>
-
-  <!-- Stats -->
-  <section class="stats" id="stats">
-    <div class="section-label">Aperçu du fichier</div>
     <div class="grid" id="grid"></div>
 
-    <div class="section-label">Colonnes détectées</div>
-    <div class="chips" id="chips"></div>
+    <div class="actionbar">
+      <button class="btn-action btn-enrich" id="btn-enrich">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg>
+        Enrichir les données
+      </button>
+      <button class="btn-action btn-stop" id="btn-stop">■ Arrêter</button>
+      <button class="btn-action btn-export" id="btn-export" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Télécharger le fichier nettoyé
+      </button>
+    </div>
 
-    <div class="section-label">Aperçu des données <span style="margin-left:auto;text-transform:none;letter-spacing:0;font-family:Inter;font-size:11px;color:var(--faint)" id="preview-count"></span></div>
+    <div class="enrich-block" id="enrich-block">
+      <div class="progress-wrap"><div class="progress-fill" id="enrich-progress"></div></div>
+      <div class="progress-label" id="enrich-label">En attente…</div>
+      <div class="log" id="enrich-log"></div>
+    </div>
+
+    <div class="section-label">Aperçu des données <span id="preview-count" style="margin-left:auto;text-transform:none;letter-spacing:0;font-family:Inter;font-size:11px;color:var(--faint)"></span></div>
     <div class="preview">
-      <div class="tbl-scroll">
-        <table id="preview-table"><thead></thead><tbody></tbody></table>
-      </div>
-      <div class="preview-foot">
-        <span id="pf-left">—</span>
-        <span id="pf-right">—</span>
-      </div>
+      <div class="tbl-scroll"><table id="preview-table"><thead></thead><tbody></tbody></table></div>
+      <div class="preview-foot"><span id="pf-left">—</span><span id="pf-right">—</span></div>
     </div>
   </section>
+
+  <div class="error-note" id="error-note"></div>
 </main>
 
 <script>
+const el = id => document.getElementById(id);
+
 // ============================================================
-//  Détection heuristique des colonnes (alignée sur les exports
-//  HubSpot / salons : Mail prospect, SIRET entreprise, etc.)
+//  Détection des colonnes
 // ============================================================
-const COLUMN_HINTS = [
-  { role:'EMAIL',      test:h => /mail|e-?mail|courriel/.test(h) },
-  { role:'ENTREPRISE', test:h => /entreprise|societe|company|raison.?social/.test(h) },
-  { role:'SIRET',      test:h => /siret|siren/.test(h) },
-  { role:'TEL',        test:h => /tel|phone|portable|mobile/.test(h) },
-  { role:'NOM',        test:h => /^nom$|^prenom$|nom complet/.test(h) },
-  { role:'ADRESSE',    test:h => /adresse|code.?postal|^cp$|ville/.test(h) },
+const norm = s => (s||'').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+const ROLE_TESTS = [
+  ['EMAIL', h=>/mail|e-?mail|courriel/.test(h)],
+  ['ENTREPRISE', h=>/entreprise|societe|company|raison.?social/.test(h)],
+  ['SIRET', h=>/siret|siren/.test(h)],
+  ['TEL', h=>/tel|phone|portable|mobile/.test(h)],
+  ['NOM', h=>/^nom$|^prenom$|nom complet/.test(h)],
+  ['ADRESSE', h=>/adresse|code.?postal|^cp$|ville/.test(h)],
+  ['DATE', h=>/date/.test(h)],
 ];
+function detectRole(header){ const h=norm(header); for(const [role,t] of ROLE_TESTS) if(t(h)) return role; return null; }
 
-const norm = s => (s||'').toString().toLowerCase()
-  .normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
-
-function detectRole(header){
-  const h = norm(header);
-  for(const hint of COLUMN_HINTS){ if(hint.test(h)) return hint.role; }
-  return null;
+function resolveCols(headers){
+  const find = re => headers.find(h => re.test(norm(h)));
+  const findAll = re => headers.filter(h => re.test(norm(h)));
+  return {
+    company: headers.find(h=>/entreprise/.test(norm(h))&&/nom/.test(norm(h))) || find(/entreprise|raison.?social|societe/),
+    siret: find(/siret/),
+    cp: find(/code.?postal|^cp$/),
+    ville: find(/ville/),
+    adresse: headers.find(h=>/adresse/.test(norm(h))&&!/2/.test(h)) || find(/adresse/),
+    effectif: find(/effectif/),
+    emails: findAll(/mail|email|courriel/),
+    phones: findAll(/tel|phone|portable|mobile/),
+    dates: findAll(/date/),
+  };
 }
 
 // ============================================================
-//  État + éléments
+//  État global
 // ============================================================
-const el = id => document.getElementById(id);
-const dropzone = el('dropzone');
-const fileInput = el('file-input');
+let fullRows = [], headers = [], cols = {}, currentFilename = '', sheetName = '';
+let stopFlag = false;
 
-dropzone.addEventListener('click', () => fileInput.click());
-dropzone.addEventListener('keydown', e => { if(e.key==='Enter'||e.key===' '){ e.preventDefault(); fileInput.click(); }});
-el('fb-replace').addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', e => { if(e.target.files[0]) loadFile(e.target.files[0]); });
+el('brand').addEventListener('click', goHome);
+el('nav-home').addEventListener('click', goHome);
+el('dropzone').addEventListener('click', () => el('file-input').click());
+el('dropzone').addEventListener('keydown', e => { if(e.key==='Enter'||e.key===' '){ e.preventDefault(); el('file-input').click(); }});
+el('fb-replace').addEventListener('click', () => el('file-input').click());
+el('file-input').addEventListener('change', e => { if(e.target.files[0]) loadFile(e.target.files[0]); e.target.value=''; });
+el('dropzone').addEventListener('dragover', e => { e.preventDefault(); el('dropzone').classList.add('drag'); });
+el('dropzone').addEventListener('dragleave', () => el('dropzone').classList.remove('drag'));
+el('dropzone').addEventListener('drop', e => { e.preventDefault(); el('dropzone').classList.remove('drag'); if(e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+el('btn-enrich').addEventListener('click', runEnrichment);
+el('btn-stop').addEventListener('click', () => { stopFlag = true; });
+el('btn-export').addEventListener('click', exportFile);
 
-dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
-dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
-dropzone.addEventListener('drop', e => {
-  e.preventDefault(); dropzone.classList.remove('drag');
-  if(e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
-});
+function showView(name){
+  el('view-home').classList.toggle('show', name==='home');
+  el('view-workspace').classList.toggle('show', name==='workspace');
+  el('nav-home').classList.toggle('show', name==='workspace');
+  el('topbar-tag').textContent = name==='workspace' ? (currentFilename || 'v2') : 'v2';
+  window.scrollTo({top:0});
+}
+function goHome(){ showView('home'); renderHistory(); }
 
 // ============================================================
 //  Lecture du fichier
@@ -396,122 +285,299 @@ function loadFile(file){
   reader.onload = e => {
     try{
       const wb = XLSX.read(e.target.result, { type:'array' });
-      const sheetName = wb.SheetNames[0];
-      const ws = wb.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json(ws, { defval:'' });
-      if(!rows.length){ showError("Le fichier semble vide ou ne contient pas d'en-têtes lisibles."); return; }
-      render(file, sheetName, rows);
+      sheetName = wb.SheetNames[0];
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval:'' });
+      if(!rows.length){ showError("Le fichier semble vide ou sans en-têtes lisibles."); return; }
+      headers = Object.keys(rows[0]).filter(h => h && !/^__EMPTY/.test(h));
+      cols = resolveCols(headers);
+      const isEmpty = r => headers.every(h => (r[h]||'').toString().trim()==='');
+      fullRows = rows.filter(r => !isEmpty(r));
+      const emptyCount = rows.length - fullRows.length;
+      currentFilename = file.name;
+      renderWorkspace(file, rows.length, emptyCount);
+      showView('workspace');
     }catch(err){
-      showError("Impossible de lire ce fichier. Vérifiez qu'il s'agit bien d'un .xlsx, .xls ou .csv valide.");
+      showError("Impossible de lire ce fichier. Vérifiez qu'il s'agit d'un .xlsx, .xls ou .csv valide.");
     }
   };
   reader.onerror = () => showError("Erreur de lecture du fichier.");
   reader.readAsArrayBuffer(file);
 }
 
-// ============================================================
-//  Calcul des statistiques + rendu
-// ============================================================
-function render(file, sheetName, rows){
-  // Ignore les colonnes fantômes (en-tête vide ou auto-nommée __EMPTY par SheetJS)
-  const headers = Object.keys(rows[0]).filter(h => h && !/^__EMPTY/.test(h));
-  const roles = {};
-  headers.forEach(h => { const r = detectRole(h); if(r) (roles[r] = roles[r] || []).push(h); });
-
-  const val = (row, cols) => (cols||[]).map(c => (row[c]||'').toString().trim()).find(v => v) || '';
-  const isEmptyRow = row => headers.every(h => (row[h]||'').toString().trim()==='');
-
-  // Beaucoup d'exports sont « gonflés » de lignes blanches : on raisonne
-  // sur les lignes réellement remplies pour des pourcentages honnêtes.
-  const fullRows = rows.filter(r => !isEmptyRow(r));
-  const emptyRows = rows.length - fullRows.length;
+function renderWorkspace(file, totalRows, emptyCount){
   const base = fullRows.length || 1;
+  const val = (row, c) => (c||[]).map(x => (row[x]||'').toString().trim()).find(v=>v) || '';
+  const withEmail = cols.emails.length ? fullRows.filter(r => val(r, cols.emails)).length : null;
+  const uniqueCompanies = cols.company ? new Set(fullRows.map(r => (r[cols.company]||'').toString().trim()).filter(Boolean)).size : null;
 
-  // Cellules remplies (complétude, sur les lignes utiles)
-  let filled = 0;
-  fullRows.forEach(row => headers.forEach(h => { if((row[h]||'').toString().trim()!=='') filled++; }));
+  let filled = 0; fullRows.forEach(r => headers.forEach(h => { if((r[h]||'').toString().trim()!=='') filled++; }));
   const totalCells = fullRows.length * headers.length;
   const completeness = totalCells ? Math.round(filled/totalCells*100) : 0;
 
-  const withEmail = roles.EMAIL ? fullRows.filter(r => val(r, roles.EMAIL)).length : null;
-  const withSiret = roles.SIRET
-    ? fullRows.filter(r => /^\d{14}$/.test(siretDigits(val(r, roles.SIRET)))).length : null;
-  const uniqueCompanies = roles.ENTREPRISE
-    ? new Set(fullRows.map(r => val(r, roles.ENTREPRISE)).filter(Boolean)).size : null;
-
-  // ---- File bar ----
   el('fb-name').textContent = file.name;
-  el('fb-detail').textContent =
-    `${formatSize(file.size)} · feuille « ${sheetName} » · ${formatFr(fullRows.length)} lignes utiles × ${headers.length} colonnes`;
-  el('filebar').classList.add('show');
-  dropzone.classList.add('loaded');
+  el('fb-detail').textContent = `${formatSize(file.size)} · feuille « ${sheetName} » · ${formatFr(fullRows.length)} lignes utiles × ${headers.length} colonnes`;
 
-  // ---- Stat cards ----
   const cards = [
-    { label:'Lignes utiles',       value:fullRows.length,    cls:'',
-      foot: emptyRows ? `sur ${formatFr(rows.length)} au total` : null },
-    { label:'Colonnes',            value:headers.length,     cls:'' },
-    { label:'Contacts avec email', value:withEmail,          cls:'accent',
+    { label:'Lignes utiles',   value:fullRows.length, cls:'accent' },
+    { label:'Lignes inutiles', value:emptyCount,      cls: emptyCount?'warn':'', foot: emptyCount?'vides, seront ignorées':'aucune' },
+    { label:'Contacts avec email', value:withEmail, cls:'',
       foot: withEmail!=null ? pct(withEmail, base)+' des lignes utiles' : 'colonne email non détectée' },
-    { label:'Entreprises uniques', value:uniqueCompanies,    cls:'',
+    { label:'Entreprises uniques', value:uniqueCompanies, cls:'',
       foot: uniqueCompanies!=null ? null : 'colonne entreprise non détectée' },
-    { label:'SIRET renseignés',    value:withSiret,          cls:'',
-      foot: withSiret!=null ? formatFr(base-withSiret)+' à enrichir' : 'colonne SIRET non détectée' },
-    { label:'Lignes vides',        value:emptyRows,          cls: emptyRows ? 'warn':'',
-      foot: emptyRows ? 'seront ignorées' : 'aucune' },
   ];
-
   el('grid').innerHTML = cards.map(c => {
-    if(c.value==null){
-      return `<div class="stat"><div class="stat-label">${c.label}</div>
-        <div class="stat-value" style="color:var(--faint)">—</div>
-        <div class="stat-foot">${c.foot||'non disponible'}</div></div>`;
-    }
-    return `<div class="stat ${c.cls}">
-      <div class="stat-label">${c.label}</div>
-      <div class="stat-value" data-count="${c.value}">0</div>
-      ${c.foot ? `<div class="stat-foot">${c.foot}</div>`:''}
-    </div>`;
-  }).join('');
+    if(c.value==null) return `<div class="stat"><div class="stat-label">${c.label}</div><div class="stat-value" style="color:var(--faint)">—</div><div class="stat-foot">${c.foot||'non disponible'}</div></div>`;
+    return `<div class="stat ${c.cls}"><div class="stat-label">${c.label}</div><div class="stat-value" data-count="${c.value}">0</div>${c.foot?`<div class="stat-foot">${c.foot}</div>`:''}</div>`;
+  }).join('') + `<div class="stat" style="grid-column:span 2"><div class="stat-label">Complétude des données</div><div class="stat-value" data-count="${completeness}">0<span class="unit">%</span></div><div class="bar-track"><div class="bar-fill" id="bar-fill"></div></div><div class="stat-foot">${formatFr(filled)} cellules remplies sur ${formatFr(totalCells)}</div></div>`;
 
-  // Carte complétude (barre)
-  el('grid').insertAdjacentHTML('beforeend', `
-    <div class="stat" style="grid-column:span 2">
-      <div class="stat-label">Complétude des données</div>
-      <div class="stat-value" data-count="${completeness}">0<span class="unit">%</span></div>
-      <div class="bar-track"><div class="bar-fill" id="bar-fill"></div></div>
-      <div class="stat-foot">${formatFr(filled)} cellules remplies sur ${formatFr(totalCells)}</div>
-    </div>`);
-
-  el('stats').classList.add('show');
   animateCounts();
-  requestAnimationFrame(() => { const b = el('bar-fill'); if(b) b.style.width = completeness+'%'; });
+  requestAnimationFrame(() => { const b=el('bar-fill'); if(b) b.style.width = completeness+'%'; });
 
-  // ---- Chips colonnes ----
-  el('chips').innerHTML = headers.map(h => {
-    const role = detectRole(h);
-    return `<span class="chip ${role?'known':''}">
-      <span class="dot"></span>${escapeHtml(h)}${role?`<span class="role">${role}</span>`:''}
-    </span>`;
-  }).join('');
+  // reset actions
+  el('btn-enrich').disabled = false;
+  el('btn-export').disabled = false;   // on autorise l'export même sans enrichissement (nettoyage de base)
+  el('btn-stop').style.display = 'none';
+  el('enrich-block').classList.remove('show');
+  el('enrich-log').innerHTML = '';
+  el('enrich-progress').style.width = '0%';
 
-  // ---- Aperçu données ----
-  const PREVIEW = 8;
+  renderPreview();
+}
+
+function renderPreview(){
+  const PREVIEW = 20;
   const slice = fullRows.slice(0, PREVIEW);
   el('preview-table').querySelector('thead').innerHTML =
     '<tr><th><span class="idx">#</span></th>' +
-    headers.map((h,i) => `<th class="${detectRole(h)?'known':''}"><span class="idx">${String(i+1).padStart(2,'0')}</span>${escapeHtml(h)}</th>`).join('') +
-    '</tr>';
+    headers.map((h,i) => `<th class="${detectRole(h)?'known':''}"><span class="idx">${String(i+1).padStart(2,'0')}</span>${escapeHtml(h)}</th>`).join('') + '</tr>';
   el('preview-table').querySelector('tbody').innerHTML = slice.map((row,i) =>
     `<tr><td style="color:var(--faint);font-family:JetBrains Mono,monospace">${i+1}</td>` +
     headers.map(h => {
       const v = (row[h]||'').toString().trim();
-      return v ? `<td title="${escapeHtml(v)}">${escapeHtml(v)}</td>` : '<td class="empty">vide</td>';
+      const cls = v ? (row.__filled && row.__filled[h] ? 'filled' : '') : 'empty';
+      return v ? `<td class="${cls}" title="${escapeHtml(v)}">${escapeHtml(v)}</td>` : '<td class="empty">vide</td>';
     }).join('') + '</tr>').join('');
-
   el('preview-count').textContent = `${Math.min(PREVIEW, fullRows.length)} premières lignes utiles`;
   el('pf-left').textContent = `${headers.length} colonnes`;
   el('pf-right').textContent = `${formatFr(fullRows.length)} lignes utiles`;
+}
+
+// ============================================================
+//  ENRICHISSEMENT — API publique Sirene (recherche-entreprises)
+// ============================================================
+const Sirene = {
+  DELAY_MS: 150, MIN_CONFIDENCE: 30,
+  EFFECTIF: {'00':'0 salarié','01':'1 ou 2 salariés','02':'3 à 5 salariés','03':'6 à 9 salariés','11':'10 à 19 salariés','12':'20 à 49 salariés','21':'50 à 99 salariés','22':'100 à 199 salariés','31':'200 à 249 salariés','32':'250 à 499 salariés','41':'500 à 999 salariés','42':'1 000 à 1 999 salariés','51':'2 000 à 4 999 salariés','52':'5 000 à 9 999 salariés','53':'10 000 salariés et plus'},
+
+  cleanStr: v => (v||'').toString().trim().replace(/\s+/g,' '),
+  normalize: s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\b(la|le|les|de|du|des|et|sa|sas|sarl|eurl|asso|association|ste|societe)\b/g,'').replace(/\s+/g,' ').trim(),
+  jaccard(a,b){const bg=s=>{const set=new Set();for(let i=0;i<s.length-1;i++)set.add(s.slice(i,i+2));return set;};const ba=bg(a),bb=bg(b);const inter=[...ba].filter(x=>bb.has(x)).length;const uni=new Set([...ba,...bb]).size;return uni?inter/uni:0;},
+
+  async callApi(q, cp){
+    const params = new URLSearchParams({ q:q.substring(0,100), per_page:'5' });
+    if(cp) params.set('code_postal', cp);
+    const res = await fetch('https://recherche-entreprises.api.gouv.fr/search?'+params.toString());
+    if(!res.ok) return [];
+    const json = await res.json();
+    return (json.results||[]).map(r => ({
+      siret: r.siege?.siret || r.matching_etablissements?.[0]?.siret || null,
+      nomLegal: r.nom_complet || r.nom_raison_sociale || '',
+      cpFound: r.siege?.code_postal || '',
+      villeFound: r.siege?.libelle_commune || '',
+      adresseFound: r.siege?.adresse || r.siege?.libelle_voie || '',
+      effectif: Sirene.EFFECTIF[r.tranche_effectif_salarie] || '',
+      apiScore: Math.round((r._score || 0) * 100),
+    }));
+  },
+
+  score(cand, src){
+    let conf = cand.apiScore;
+    if(src.cp && cand.cpFound){ conf += (src.cp.replace(/\s/g,'')===cand.cpFound.replace(/\s/g,'')) ? 30 : -40; }
+    if(src.ville && cand.villeFound){ const v1=Sirene.normalize(src.ville),v2=Sirene.normalize(cand.villeFound); if(v2.includes(v1)||v1.includes(v2)) conf += 15; }
+    if(src.nom && cand.nomLegal){ const n1=Sirene.normalize(src.nom),n2=Sirene.normalize(cand.nomLegal); if(n2.includes(n1)||n1.includes(n2)||Sirene.jaccard(n1,n2)>0.4) conf += 10; }
+    if(!cand.siret) conf = 0;
+    return Math.max(0, Math.min(100, Math.round(conf)));
+  },
+
+  async search(nom, adresse, cp, ville){
+    if(!nom) return null;
+    const strat = [];
+    if(nom&&adresse&&cp) strat.push({q:`${nom} ${adresse}`, cp, label:'nom+adresse+CP'});
+    if(nom&&ville&&cp)   strat.push({q:`${nom} ${ville}`,   cp, label:'nom+ville+CP'});
+    if(nom&&cp)          strat.push({q:nom,                 cp, label:'nom+CP'});
+    if(nom&&ville)       strat.push({q:`${nom} ${ville}`,   cp:'', label:'nom+ville'});
+    for(const s of strat){
+      let cands;
+      try{ cands = await Sirene.callApi(s.q, s.cp); }catch{ continue; }
+      if(!cands.length) continue;
+      const scored = cands.map(c => ({...c, confidence:Sirene.score(c,{nom,adresse,cp,ville})})).sort((a,b)=>b.confidence-a.confidence);
+      const best = scored[0];
+      if(best.confidence >= Sirene.MIN_CONFIDENCE) return {...best, strategy:s.label};
+    }
+    return null;
+  },
+};
+
+function siretDigits(v){ let s=(v||'').toString().trim().replace(/\s/g,''); if(/e/i.test(s)||s.includes('.')){ const n=Number(s); if(isFinite(n)) s=Math.round(n).toString(); } return s; }
+function hasSiret(row){ return cols.siret && /^\d{14}$/.test(siretDigits(row[cols.siret])); }
+
+async function runEnrichment(){
+  if(!cols.company){ showError("Pas de colonne « entreprise » détectée : l'enrichissement a besoin du nom d'entreprise."); return; }
+  stopFlag = false;
+  el('btn-enrich').disabled = true;
+  el('btn-export').disabled = true;
+  el('btn-stop').style.display = 'inline-flex';
+  el('enrich-block').classList.add('show');
+  const log = el('enrich-log'); log.innerHTML = '';
+  const addLog = (msg, type) => { const d=document.createElement('div'); d.className='log-'+(type||'info'); d.textContent=new Date().toLocaleTimeString()+' · '+msg; log.appendChild(d); log.scrollTop=log.scrollHeight; };
+
+  const targets = fullRows.filter(r => !hasSiret(r) && (r[cols.company]||'').toString().trim());
+  if(!targets.length){ addLog('Aucune ligne à enrichir : tous les SIRET sont déjà renseignés.', 'ok'); finishEnrich(); return; }
+
+  addLog(`Enrichissement de ${targets.length} ligne(s) via l'API Sirene…`, 'info');
+  const cache = new Map();
+  let done=0, found=0, miss=0;
+
+  for(const row of targets){
+    if(stopFlag){ addLog('Arrêté par l\'utilisateur.', 'warn'); break; }
+    const nom = Sirene.cleanStr(row[cols.company]);
+    const adresse = Sirene.cleanStr(cols.adresse && row[cols.adresse]);
+    const cp = Sirene.cleanStr(cols.cp && row[cols.cp]);
+    const ville = Sirene.cleanStr(cols.ville && row[cols.ville]);
+    const key = Sirene.normalize(nom)+'|'+cp;
+
+    let result;
+    if(cache.has(key)){ result = cache.get(key); }
+    else { try{ result = await Sirene.search(nom, adresse, cp, ville); }catch{ result=null; } cache.set(key, result); await sleep(Sirene.DELAY_MS); }
+
+    if(result && result.siret){
+      found++;
+      row.__filled = row.__filled || {};
+      if(cols.siret){ row[cols.siret]=result.siret; row.__filled[cols.siret]=true; }
+      const fillIfEmpty = (col, v) => { if(col && v && !(row[col]||'').toString().trim()){ row[col]=v; row.__filled[col]=true; } };
+      fillIfEmpty(cols.cp, result.cpFound);
+      fillIfEmpty(cols.ville, result.villeFound);
+      fillIfEmpty(cols.adresse, result.adresseFound);
+      fillIfEmpty(cols.effectif, result.effectif);
+      addLog(`✓ ${nom} → ${result.siret} (${result.confidence}% · ${result.strategy})`, 'ok');
+    } else { miss++; addLog(`✗ ${nom}${cp?' ('+cp+')':''} — non trouvé`, 'warn'); }
+
+    done++;
+    const pctv = Math.round(done/targets.length*100);
+    el('enrich-progress').style.width = pctv+'%';
+    el('enrich-label').textContent = `${done} / ${targets.length} traités (${pctv}%) — ${found} trouvés, ${miss} non trouvés`;
+  }
+
+  addLog(`Terminé : ${found} enrichi(s), ${miss} non trouvé(s).`, 'ok');
+  renderPreview();
+  finishEnrich();
+}
+function finishEnrich(){ el('btn-enrich').disabled=false; el('btn-export').disabled=false; el('btn-stop').style.display='none'; }
+
+// ============================================================
+//  NETTOYAGE + EXPORT + HISTORIQUE
+// ============================================================
+function formatPhone(val){
+  if(val==null||val==='') return val;
+  let s=String(val).replace(/[\s.\-()]/g,'');
+  if(s.startsWith('+33')) return String(val).trim();
+  if(s.startsWith('0033')) return '+33'+s.slice(4);
+  if(s.startsWith('33')&&s.length>=11) return '+'+s;
+  if(s.startsWith('0')&&s.length===10) return '+33'+s.slice(1);
+  return String(val).trim();
+}
+function excelDate(v){
+  const n=Number(v); if(!isFinite(n)||n<20000||n>90000) return v;
+  const d=new Date(Math.round((n-25569)*86400*1000)); if(isNaN(d)) return v;
+  const p=x=>String(x).padStart(2,'0');
+  return `${p(d.getUTCDate())}/${p(d.getUTCMonth()+1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+}
+function buildCleanedRows(){
+  return fullRows.map(src => {
+    const r = {};
+    headers.forEach(h => r[h] = (src[h]==null?'':src[h]));
+    // SIRET en texte propre
+    if(cols.siret) r[cols.siret] = siretDigits(r[cols.siret]) || '';
+    // Email principal
+    if(cols.emails.length){
+      const e = cols.emails.map(c => (r[c]||'').toString().trim()).find(v=>v) || '';
+      r['Email principal'] = e;
+    }
+    // Téléphones en +33
+    cols.phones.forEach(c => { if(r[c]) r[c]=formatPhone(r[c]); });
+    // Dates lisibles
+    cols.dates.forEach(c => { if(r[c]!=='' && r[c]!=null && !isNaN(Number(r[c]))) r[c]=excelDate(r[c]); });
+    return r;
+  });
+}
+function buildWorkbook(){
+  const rows = buildCleanedRows();
+  const outCols = (cols.emails.length ? ['Email principal'] : []).concat(headers);
+  const aoa = [outCols, ...rows.map(r => outCols.map(c => r[c] ?? ''))];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = outCols.map(() => ({ wch:22 }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Contacts');
+  return { wb, count: rows.length };
+}
+function outName(){
+  const base = currentFilename.replace(/\.(xlsx|xls|csv)$/i,'');
+  return `${base}_nettoye_${new Date().toISOString().slice(0,10)}.xlsx`;
+}
+async function exportFile(){
+  const { wb, count } = buildWorkbook();
+  const name = outName();
+  const arr = XLSX.write(wb, { bookType:'xlsx', type:'array' });
+  const blob = new Blob([arr], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  // téléchargement
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+  // sauvegarde dans l'historique
+  try{ await dbPut({ id:'f_'+Date.now()+'_'+Math.random().toString(36).slice(2,7), name, date:Date.now(), rows:count, blob }); }
+  catch(e){ /* stockage indisponible (ex. aperçu en bac à sable) */ }
+}
+
+// ============================================================
+//  Stockage navigateur (IndexedDB)
+// ============================================================
+const DB_NAME='hsc_files', STORE='files';
+function openDB(){ return new Promise((res,rej)=>{ const rq=indexedDB.open(DB_NAME,1); rq.onupgradeneeded=()=>{ if(!rq.result.objectStoreNames.contains(STORE)) rq.result.createObjectStore(STORE,{keyPath:'id'}); }; rq.onsuccess=()=>res(rq.result); rq.onerror=()=>rej(rq.error); }); }
+async function dbPut(rec){ const db=await openDB(); return new Promise((res,rej)=>{ const tx=db.transaction(STORE,'readwrite'); tx.objectStore(STORE).put(rec); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }
+async function dbAll(){ const db=await openDB(); return new Promise((res,rej)=>{ const tx=db.transaction(STORE,'readonly'); const rq=tx.objectStore(STORE).getAll(); rq.onsuccess=()=>res(rq.result||[]); rq.onerror=()=>rej(rq.error); }); }
+async function dbDel(id){ const db=await openDB(); return new Promise((res,rej)=>{ const tx=db.transaction(STORE,'readwrite'); tx.objectStore(STORE).delete(id); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }
+
+async function renderHistory(){
+  const host = el('files-host');
+  let files = [];
+  try{ files = await dbAll(); }catch{ host.innerHTML = `<div class="files-empty">L'historique n'est pas disponible dans cet aperçu. Il fonctionnera une fois le fichier déployé en ligne.</div>`; return; }
+  files.sort((a,b)=>b.date-a.date);
+  if(!files.length){ host.innerHTML = `<div class="files-empty">Aucun fichier nettoyé pour l'instant. Déposez un fichier ci-dessus pour commencer.</div>`; return; }
+  host.innerHTML = `<div class="files">` + files.map(f => `
+    <div class="file-row" data-id="${f.id}">
+      <div class="fr-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+      <div class="fr-meta">
+        <div class="fr-name">${escapeHtml(f.name)}</div>
+        <div class="fr-detail">${formatFr(f.rows)} lignes · ${new Date(f.date).toLocaleString('fr-FR')}</div>
+      </div>
+      <div class="fr-actions">
+        <button class="btn-ghost btn-dl" data-act="dl">Télécharger</button>
+        <button class="btn-ghost btn-del" data-act="del">Supprimer</button>
+      </div>
+    </div>`).join('') + `</div>`;
+
+  host.querySelectorAll('.file-row').forEach(rowEl => {
+    const id = rowEl.dataset.id;
+    rowEl.querySelector('[data-act="dl"]').addEventListener('click', async () => {
+      const all = await dbAll(); const f = all.find(x=>x.id===id); if(!f) return;
+      const url = URL.createObjectURL(f.blob);
+      const a = document.createElement('a'); a.href=url; a.download=f.name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 4000);
+    });
+    rowEl.querySelector('[data-act="del"]').addEventListener('click', async () => {
+      await dbDel(id); renderHistory();
+    });
+  });
 }
 
 // ============================================================
@@ -520,40 +586,22 @@ function render(file, sheetName, rows){
 function animateCounts(){
   const reduce = window.matchMedia('(prefers-reduced-motion:reduce)').matches;
   document.querySelectorAll('.stat-value[data-count]').forEach(node => {
-    const target = +node.dataset.count;
-    const unit = node.querySelector('.unit');
-    const unitHtml = unit ? unit.outerHTML : '';
-    if(reduce){ node.innerHTML = formatFr(target)+unitHtml; return; }
-    const dur = 650, t0 = performance.now();
-    (function step(now){
-      const p = Math.min((now-t0)/dur, 1);
-      const eased = 1-Math.pow(1-p,3);
-      node.innerHTML = formatFr(Math.round(target*eased))+unitHtml;
-      if(p<1) requestAnimationFrame(step);
-    })(t0);
+    const target=+node.dataset.count, unit=node.querySelector('.unit'), uh=unit?unit.outerHTML:'';
+    if(reduce){ node.innerHTML=formatFr(target)+uh; return; }
+    const dur=650, t0=performance.now();
+    (function step(now){ const p=Math.min((now-t0)/dur,1); node.innerHTML=formatFr(Math.round(target*(1-Math.pow(1-p,3))))+uh; if(p<1) requestAnimationFrame(step); })(t0);
   });
 }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 function formatFr(n){ return Number(n).toLocaleString('fr-FR'); }
-// SIRET souvent stocké en nombre / notation scientifique par Excel (3.81E13)
-function siretDigits(v){
-  let s = (v||'').toString().trim().replace(/\s/g,'');
-  if(/e/i.test(s) || s.includes('.')){
-    const n = Number(s);
-    if(isFinite(n)) s = Math.round(n).toString();
-  }
-  return s;
-}
 function pct(a,b){ return b ? Math.round(a/b*100)+'%' : '0%'; }
-function formatSize(bytes){
-  if(bytes<1024) return bytes+' o';
-  if(bytes<1024*1024) return (bytes/1024).toFixed(0)+' Ko';
-  return (bytes/1024/1024).toFixed(1)+' Mo';
-}
-function escapeHtml(s){
-  return (s||'').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-}
-function showError(msg){ const n=el('error-note'); n.textContent=msg; n.classList.add('show'); }
+function formatSize(b){ if(b<1024) return b+' o'; if(b<1048576) return (b/1024).toFixed(0)+' Ko'; return (b/1048576).toFixed(1)+' Mo'; }
+function escapeHtml(s){ return (s||'').toString().replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function showError(m){ const n=el('error-note'); n.textContent=m; n.classList.add('show'); }
 function hideError(){ el('error-note').classList.remove('show'); }
+
+// Init
+renderHistory();
 </script>
 </body>
 </html>
