@@ -445,7 +445,7 @@ function renderWorkspace(file, totalRows, emptyCount){
 
 const PREVIEW_N = 20;
 function renderTable(table, columns, rows){
-  const slice = rows.slice(0, PREVIEW_N);
+  const slice = rows;   // toutes les lignes
   const isKnown = h => detectRole(h) || h==='Email principal' || h.indexOf("Nom de l'entreprise")===0 || h==='Phase du cycle de vie' || h==='Source du contact';
   table.querySelector('thead').innerHTML =
     '<tr><th><span class="idx">#</span></th>' +
@@ -458,7 +458,7 @@ function renderTable(table, columns, rows){
       const filled = row.__filled && row.__filled[h];
       return `<td class="${filled?'filled':''}" title="${escapeHtml(v)}">${escapeHtml(v)}</td>`;
     }).join('') + '</tr>').join('');
-  return Math.min(PREVIEW_N, rows.length);
+  return rows.length;
 }
 
 function renderOriginalPreview(){
@@ -480,7 +480,7 @@ function switchTab(which){
   el('tab-clean').classList.toggle('active', !orig);
   el('pane-orig').style.display = orig ? '' : 'none';
   el('pane-clean').style.display = orig ? 'none' : '';
-  el('tab-count').textContent = `${PREVIEW_N} premières lignes`;
+  el('tab-count').textContent = `${formatFr(orig ? originalRows.length : fullRows.length)} lignes`;
   if(!orig) renderCleanedPreview();
 }
 
@@ -671,21 +671,25 @@ function excelDate(v){
   const p=x=>String(x).padStart(2,'0');
   return `${p(d.getUTCDate())}/${p(d.getUTCMonth()+1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
 }
-// Sigles d'entreprise à garder en majuscules
-const COMPANY_ACRONYMS = new Set(['SARL','SAS','SASU','SA','EURL','SCI','SCM','SCP','SCOP','SNC','SCS','GIE','SE','EI','EIRL','EHPAD','CSE','CSEE','CSEC','CCAS','CHU','CHR','CH','RH','IME','ITEP','ESAT','MJC','CFA','BTP','TP','SDIS','GMBH','LLC','LTD','SIVU','SIVOM','SMIC','CCI','CMA','MFR','APEI','ADMR','UDAF']);
-// Mots de liaison en minuscules (sauf en début)
-const LOWER_WORDS = new Set(['de','du','des','la','le','les','et','aux','au','en','sur','sous','d','l']);
+// Sigles à garder en majuscules (entreprise + adresses)
+const COMPANY_ACRONYMS = new Set(['SARL','SAS','SASU','SA','EURL','SCI','SCM','SCP','SCOP','SNC','SCS','GIE','SE','EI','EIRL','EHPAD','CSE','CSEE','CSEC','CCAS','CHU','CHR','CH','RH','IME','ITEP','ESAT','MJC','CFA','BTP','TP','SDIS','GMBH','LLC','LTD','SIVU','SIVOM','CCI','CMA','MFR','APEI','ADMR','UDAF','ZA','ZI','ZAC','ZAE','BP','CS','CEDEX','RN','RD']);
+// Mots de liaison en minuscules (sauf en tout début)
+const LOWER_WORDS = new Set(['de','du','des','la','le','les','et','aux','au','en','sur','sous','les','lès','d','l']);
 function properCase(str, opts){
   opts = opts || {};
   const s = (str||'').toString().trim();
   if(!s) return s;
-  return s.split(/\s+/).map((w, i) => {
-    if(opts.company && COMPANY_ACRONYMS.has(w.toUpperCase())) return w.toUpperCase();
-    if(i > 0 && LOWER_WORDS.has(w.toLowerCase().replace(/[.'’]/g,''))) return w.toLowerCase();
-    let out = w.toLowerCase().replace(/(^|[-'’])([a-zà-ÿ])/g, (m, sep, ch) => sep + ch.toUpperCase());
-    if(i > 0) out = out.replace(/^([DLNMTSJC])(['’])/, (m, p, ap) => p.toLowerCase() + ap); // particule élidée : d', l'…
+  let first = true;
+  // on traite chaque « mot » (séparé par espace OU trait d'union), en gardant les séparateurs
+  return s.replace(/[^\s-]+/g, tok => {
+    const isFirst = first; first = false;
+    if(opts.company && COMPANY_ACRONYMS.has(tok.toUpperCase())) return tok.toUpperCase();
+    const bare = tok.toLowerCase().replace(/[.'’]/g,'');
+    if(!isFirst && LOWER_WORDS.has(bare)) return tok.toLowerCase();
+    let out = tok.toLowerCase().replace(/(^|['’])([a-zà-ÿ])/g, (m, sep, ch) => sep + ch.toUpperCase());
+    if(!isFirst) out = out.replace(/^([dlnmtsjc])(['’])/i, (m, p, ap) => p.toLowerCase() + ap); // particule élidée d', l'
     return out;
-  }).join(' ');
+  });
 }
 
 // ============================================================
@@ -702,10 +706,15 @@ const COMPANY_COL_2 = "Nom de l'entreprise - contact";
 function buildOutput(){
   const emailsPresent = cols.emails.length > 0;
 
+  // Colonnes entièrement vides → supprimées (on garde toujours la colonne entreprise
+  // car elle alimente les deux colonnes dupliquées demandées)
+  const nonEmptyHeader = h => fullRows.some(r => (r[h]||'').toString().trim() !== '');
+  const keptHeaders = headers.filter(h => h === cols.company || nonEmptyHeader(h));
+
   // Ordre des colonnes de sortie
   const outCols = [];
   if(emailsPresent) outCols.push('Email principal');
-  headers.forEach(h => {
+  keptHeaders.forEach(h => {
     if(cols.company && h === cols.company){ outCols.push(COMPANY_COL_1, COMPANY_COL_2); }
     else outCols.push(h);
   });
@@ -726,6 +735,8 @@ function buildOutput(){
     // Casse nom propre
     if(cols.firstname && r[cols.firstname]) r[cols.firstname] = properCase(r[cols.firstname]);
     if(cols.lastname  && r[cols.lastname])  r[cols.lastname]  = properCase(r[cols.lastname]);
+    if(cols.adresse   && r[cols.adresse])   r[cols.adresse]   = properCase(r[cols.adresse], {company:true});
+    if(cols.ville     && r[cols.ville])     r[cols.ville]     = properCase(r[cols.ville], {company:true});
     const companyName = cols.company ? properCase((r[cols.company]||'').toString(), {company:true}) : '';
 
     // Email principal + dédoublonnage
