@@ -238,6 +238,8 @@ td.filled{background:var(--jade-soft)!important;color:var(--jade-deep);font-weig
       <div class="log" id="enrich-log"></div>
     </div>
 
+    <div id="result-panel"></div>
+
     <div class="tabs">
       <button class="tab active" id="tab-orig">Fichier original</button>
       <button class="tab" id="tab-clean" disabled title="Lancez « Nettoyer et enrichir » pour générer cet aperçu">Fichier nettoyé et enrichi</button>
@@ -401,7 +403,7 @@ function renderWorkspace(file, totalRows, emptyCount){
   const base = fullRows.length || 1;
   const val = (row, c) => (c||[]).map(x => (row[x]||'').toString().trim()).find(v=>v) || '';
   const withEmail = cols.emails.length ? fullRows.filter(r => val(r, cols.emails)).length : null;
-  const uniqueCompanies = cols.company ? new Set(fullRows.map(r => (r[cols.company]||'').toString().trim()).filter(Boolean)).size : null;
+  const uniqueCompanies = cols.company ? new Set(fullRows.map(r => Sirene.normalize((r[cols.company]||'').toString())).filter(Boolean)).size : null;
 
   let filled = 0; fullRows.forEach(r => headers.forEach(h => { if((r[h]||'').toString().trim()!=='') filled++; }));
   const totalCells = fullRows.length * headers.length;
@@ -434,6 +436,7 @@ function renderWorkspace(file, totalRows, emptyCount){
   el('enrich-log').innerHTML = '';
   el('enrich-progress').style.width = '0%';
   el('export-note').classList.remove('show');
+  el('result-panel').innerHTML = '';
   el('tab-clean').disabled = true;
   switchTab('orig');
 
@@ -479,6 +482,54 @@ function switchTab(which){
   el('pane-clean').style.display = orig ? 'none' : '';
   el('tab-count').textContent = `${PREVIEW_N} premières lignes`;
   if(!orig) renderCleanedPreview();
+}
+
+// ============================================================
+//  RÉCAPITULATIF — indicateurs sur les ENTREPRISES UNIQUES
+//  (une entreprise présente sur 4 lignes n'est comptée qu'une fois)
+// ============================================================
+function uniqueCompanyStats(){
+  const validSiret = v => /^\d{14}$/.test(siretDigits(v));
+  const filled = v => (v||'').toString().trim() !== '';
+  const keyOf = r => Sirene.normalize((r[cols.company]||'').toString());
+  const map = new Map();
+  for(let i=0; i<fullRows.length; i++){
+    const cur = fullRows[i], orig = originalRows[i];
+    const k = keyOf(cur); if(!k) continue;
+    let e = map.get(k);
+    if(!e){ e = {bS:false,aS:false,bC:false,aC:false,bE:false,aE:false}; map.set(k,e); }
+    if(cols.siret){ if(validSiret(orig[cols.siret])) e.bS=true; if(validSiret(cur[cols.siret])) e.aS=true; }
+    if(cols.cp){ if(filled(orig[cols.cp])) e.bC=true; if(filled(cur[cols.cp])) e.aC=true; }
+    if(cols.effectif){ if(filled(orig[cols.effectif])) e.bE=true; if(filled(cur[cols.effectif])) e.aE=true; }
+  }
+  let aS=0,aC=0,aE=0,enS=0,enC=0,enE=0;
+  for(const e of map.values()){
+    if(e.aS) aS++; if(e.aC) aC++; if(e.aE) aE++;
+    if(!e.bS&&e.aS) enS++; if(!e.bC&&e.aC) enC++; if(!e.bE&&e.aE) enE++;
+  }
+  return { total:map.size, siret:{after:aS,enriched:enS}, cp:{after:aC,enriched:enC}, eff:{after:aE,enriched:enE} };
+}
+
+function renderEnrichResult(){
+  const panel = el('result-panel');
+  if(!cols.company){ panel.innerHTML=''; return; }
+  const s = uniqueCompanyStats();
+  const card = (label, d) => `
+    <div class="stat accent">
+      <div class="stat-label">${label}</div>
+      <div class="stat-value" data-count="${d.enriched}">0</div>
+      <div class="stat-foot"><strong>${pct(d.after, s.total)}</strong> des entreprises en ont un · ${formatFr(d.after)}/${formatFr(s.total)}</div>
+    </div>`;
+  let cards = '';
+  if(cols.siret)    cards += card('SIRET enrichis', s.siret);
+  if(cols.cp)       cards += card('Codes postaux enrichis', s.cp);
+  if(cols.effectif) cards += card("Nombre d'employés enrichis", s.eff);
+  panel.innerHTML = `
+    <div class="section-label">Résultat de l'enrichissement
+      <span style="margin-left:auto;text-transform:none;letter-spacing:0;font-family:Inter;font-size:11px;color:var(--faint)">sur ${formatFr(s.total)} entreprises uniques</span>
+    </div>
+    <div class="grid">${cards}</div>`;
+  animateCounts(panel);
 }
 
 // ============================================================
@@ -594,6 +645,7 @@ async function runProcess(){
   // Nettoyage + aperçu du résultat
   addLog('Nettoyage appliqué (casse, téléphones, dates, colonnes, doublons d\'email).', 'ok');
   el('enrich-progress').style.width = '100%';
+  renderEnrichResult();
   el('tab-clean').disabled = false;
   switchTab('clean');
   el('btn-export').disabled = false;
@@ -783,9 +835,10 @@ async function renderHistory(){
 // ============================================================
 //  Helpers
 // ============================================================
-function animateCounts(){
+function animateCounts(root){
+  const scope = root || document;
   const reduce = window.matchMedia('(prefers-reduced-motion:reduce)').matches;
-  document.querySelectorAll('.stat-value[data-count]').forEach(node => {
+  scope.querySelectorAll('.stat-value[data-count]').forEach(node => {
     const target=+node.dataset.count, unit=node.querySelector('.unit'), uh=unit?unit.outerHTML:'';
     if(reduce){ node.innerHTML=formatFr(target)+uh; return; }
     const dur=650, t0=performance.now();
