@@ -423,6 +423,20 @@ function setLoadStatus(msg){
 const SHEET_RE = /\.(xlsx|xls|csv)$/i;
 const isJunk = path => /(^|\/)__MACOSX\//.test(path) || /(^|\/)\.[^/]*$/.test(path);
 
+// Lecture d'un classeur. Les CSV sont décodés en UTF-8 (repli Windows-1252)
+// pour éviter les accents cassés (« Société » → « SociÃ©tÃ© ») qui faussent tout.
+function decodeCsv(buf){
+  let text;
+  try{ text = new TextDecoder('utf-8', {fatal:true}).decode(buf); }
+  catch{ text = new TextDecoder('windows-1252').decode(buf); }
+  if(text && text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // BOM éventuel
+  return text;
+}
+function readWorkbook(name, buf){
+  if(/\.csv$/i.test(name)) return XLSX.read(decodeCsv(buf), { type:'string' });
+  return XLSX.read(buf, { type:'array' });
+}
+
 async function loadFiles(fileList){
   hideError();
   const files = Array.from(fileList);
@@ -456,7 +470,7 @@ async function loadFiles(fileList){
       setLoadStatus(`Lecture ${s+1}/${sheets.length} : ${sh.name}`);
       await sleep(0);
       let wb;
-      try{ wb = XLSX.read(sh.buf, { type:'array' }); }catch{ koFiles++; continue; }
+      try{ wb = readWorkbook(sh.name, sh.buf); }catch{ koFiles++; continue; }
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, { defval:'' });
       if(!rows.length){ koFiles++; continue; }
