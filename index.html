@@ -545,7 +545,7 @@ const Sirene = {
   jaccard(a,b){const bg=s=>{const set=new Set();for(let i=0;i<s.length-1;i++)set.add(s.slice(i,i+2));return set;};const ba=bg(a),bb=bg(b);const inter=[...ba].filter(x=>bb.has(x)).length;const uni=new Set([...ba,...bb]).size;return uni?inter/uni:0;},
 
   async callApi(q, cp){
-    const params = new URLSearchParams({ q:q.substring(0,100), per_page:'10' });
+    const params = new URLSearchParams({ q:q.substring(0,100), per_page:'20' });
     if(cp) params.set('code_postal', cp);
     const url = 'https://recherche-entreprises.api.gouv.fr/search?'+params.toString();
     let res = await fetch(url);
