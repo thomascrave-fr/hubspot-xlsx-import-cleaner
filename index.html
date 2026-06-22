@@ -537,7 +537,7 @@ function renderEnrichResult(){
 //  ENRICHISSEMENT — API publique Sirene (recherche-entreprises)
 // ============================================================
 const Sirene = {
-  DELAY_MS: 150, MIN_CONFIDENCE: 30,
+  DELAY_MS: 160, MIN_CONFIDENCE: 32,
   EFFECTIF: {'00':'0 salarié','01':'1 ou 2 salariés','02':'3 à 5 salariés','03':'6 à 9 salariés','11':'10 à 19 salariés','12':'20 à 49 salariés','21':'50 à 99 salariés','22':'100 à 199 salariés','31':'200 à 249 salariés','32':'250 à 499 salariés','41':'500 à 999 salariés','42':'1 000 à 1 999 salariés','51':'2 000 à 4 999 salariés','52':'5 000 à 9 999 salariés','53':'10 000 salariés et plus'},
 
   cleanStr: v => (v||'').toString().trim().replace(/\s+/g,' '),
@@ -545,47 +545,76 @@ const Sirene = {
   jaccard(a,b){const bg=s=>{const set=new Set();for(let i=0;i<s.length-1;i++)set.add(s.slice(i,i+2));return set;};const ba=bg(a),bb=bg(b);const inter=[...ba].filter(x=>bb.has(x)).length;const uni=new Set([...ba,...bb]).size;return uni?inter/uni:0;},
 
   async callApi(q, cp){
-    const params = new URLSearchParams({ q:q.substring(0,100), per_page:'5' });
+    const params = new URLSearchParams({ q:q.substring(0,100), per_page:'10' });
     if(cp) params.set('code_postal', cp);
-    const res = await fetch('https://recherche-entreprises.api.gouv.fr/search?'+params.toString());
+    const url = 'https://recherche-entreprises.api.gouv.fr/search?'+params.toString();
+    let res = await fetch(url);
+    if(res.status === 429){ await sleep(1200); res = await fetch(url); } // limite de débit : on patiente et on réessaie
     if(!res.ok) return [];
     const json = await res.json();
-    return (json.results||[]).map(r => ({
-      siret: r.siege?.siret || r.matching_etablissements?.[0]?.siret || null,
-      nomLegal: r.nom_complet || r.nom_raison_sociale || '',
-      cpFound: r.siege?.code_postal || '',
-      villeFound: r.siege?.libelle_commune || '',
-      adresseFound: r.siege?.adresse || r.siege?.libelle_voie || '',
-      effectif: Sirene.EFFECTIF[r.tranche_effectif_salarie] || '',
-      apiScore: Math.round((r._score || 0) * 100),
-    }));
+    return (json.results||[]).map(r => {
+      // SIRET = 14 chiffres (≠ SIREN à 9). On ne retient qu'un SIRET valide.
+      const candidates = [r.siege?.siret, r.matching_etablissements?.[0]?.siret];
+      const siret = candidates.find(x => /^\d{14}$/.test((x||'').toString())) || null;
+      return {
+        siret,
+        nomLegal: r.nom_complet || r.nom_raison_sociale || '',
+        cpFound: r.siege?.code_postal || '',
+        villeFound: r.siege?.libelle_commune || '',
+        adresseFound: r.siege?.adresse || r.siege?.libelle_voie || '',
+        effectif: Sirene.EFFECTIF[r.tranche_effectif_salarie] || '',
+      };
+    });
   },
 
-  score(cand, src){
-    let conf = cand.apiScore;
-    if(src.cp && cand.cpFound){ conf += (src.cp.replace(/\s/g,'')===cand.cpFound.replace(/\s/g,'')) ? 30 : -40; }
-    if(src.ville && cand.villeFound){ const v1=Sirene.normalize(src.ville),v2=Sirene.normalize(cand.villeFound); if(v2.includes(v1)||v1.includes(v2)) conf += 15; }
-    if(src.nom && cand.nomLegal){ const n1=Sirene.normalize(src.nom),n2=Sirene.normalize(cand.nomLegal); if(n2.includes(n1)||n1.includes(n2)||Sirene.jaccard(n1,n2)>0.4) conf += 10; }
-    if(!cand.siret) conf = 0;
+  // Le NOM est obligatoire : sans correspondance de nom, on refuse (évite les faux
+  // positifs sur le seul CP). CP et ville affinent. En recherche large, le CP ne pénalise pas.
+  score(cand, src, opts){
+    opts = opts || {};
+    let nameConf = 0;
+    if(src.nom && cand.nomLegal){
+      const n1 = Sirene.normalize(src.nom), n2 = Sirene.normalize(cand.nomLegal);
+      if(n1 && n2){
+        if(n1 === n2) nameConf = 60;
+        else if(n2.includes(n1) || n1.includes(n2)) nameConf = 50;
+        else { const j = Sirene.jaccard(n1, n2); nameConf = j>0.55?45 : j>0.35?30 : j>0.2?15 : 0; }
+      }
+    }
+    if(nameConf === 0 || !cand.siret) return 0;
+    let conf = nameConf;
+    if(src.cp && cand.cpFound){
+      const match = src.cp.replace(/\s/g,'') === cand.cpFound.replace(/\s/g,'');
+      conf += match ? 30 : (opts.noCpPenalty ? 0 : -10);
+    }
+    if(src.ville && cand.villeFound){
+      const v1 = Sirene.normalize(src.ville), v2 = Sirene.normalize(cand.villeFound);
+      if(v1 && v2 && (v2.includes(v1) || v1.includes(v2))) conf += 15;
+    }
     return Math.max(0, Math.min(100, Math.round(conf)));
   },
 
   async search(nom, adresse, cp, ville){
-    if(!nom) return null;
+    if(!nom) return { siret:null, reason:'nom manquant' };
     const strat = [];
-    if(nom&&adresse&&cp) strat.push({q:`${nom} ${adresse}`, cp, label:'nom+adresse+CP'});
-    if(nom&&ville&&cp)   strat.push({q:`${nom} ${ville}`,   cp, label:'nom+ville+CP'});
-    if(nom&&cp)          strat.push({q:nom,                 cp, label:'nom+CP'});
-    if(nom&&ville)       strat.push({q:`${nom} ${ville}`,   cp:'', label:'nom+ville'});
+    if(cp)    strat.push({ q:nom,                 cp,    loose:false, label:'nom+CP' });
+    if(ville) strat.push({ q:`${nom} ${ville}`,   cp:'', loose:true,  label:'nom+ville' });
+    strat.push({ q:nom, cp:'', loose:true, label:'nom seul' });   // repli large, comme une recherche Google
+
+    let best = null, anyCandidate = false, i = 0;
     for(const s of strat){
+      if(i++) await sleep(90);
       let cands;
       try{ cands = await Sirene.callApi(s.q, s.cp); }catch{ continue; }
       if(!cands.length) continue;
-      const scored = cands.map(c => ({...c, confidence:Sirene.score(c,{nom,adresse,cp,ville})})).sort((a,b)=>b.confidence-a.confidence);
-      const best = scored[0];
-      if(best.confidence >= Sirene.MIN_CONFIDENCE) return {...best, strategy:s.label};
+      anyCandidate = true;
+      const scored = cands
+        .map(c => ({ ...c, confidence:Sirene.score(c, {nom,cp,ville}, {noCpPenalty:s.loose}), strategy:s.label }))
+        .sort((a,b)=>b.confidence-a.confidence);
+      if(!best || scored[0].confidence > best.confidence) best = scored[0];
+      if(best.confidence >= 75) break;   // match franc : inutile de continuer
     }
-    return null;
+    if(best && best.confidence >= Sirene.MIN_CONFIDENCE) return best;
+    return { siret:null, reason: anyCandidate ? `meilleur score ${best?best.confidence:0}% — trop faible` : 'aucun résultat API', bestConf: best?best.confidence:0 };
   },
 };
 
@@ -623,7 +652,7 @@ async function runProcess(){
         let result;
         if(cache.has(key)){ result = cache.get(key); }
         else { try{ result = await Sirene.search(nom, adresse, cp, ville); }catch{ result=null; } cache.set(key, result); await sleep(Sirene.DELAY_MS); }
-        if(result && result.siret){
+        if(result && result.siret && /^\d{14}$/.test(result.siret)){
           found++;
           row.__filled = row.__filled || {};
           if(cols.siret){ row[cols.siret]=result.siret; row.__filled[cols.siret]=true; }
@@ -632,8 +661,8 @@ async function runProcess(){
           fillIfEmpty(cols.ville, result.villeFound);
           fillIfEmpty(cols.adresse, result.adresseFound);
           fillIfEmpty(cols.effectif, result.effectif);
-          addLog(`✓ ${nom} → ${result.siret} (${result.confidence}% · ${result.strategy})`, 'ok');
-        } else { miss++; addLog(`✗ ${nom}${cp?' ('+cp+')':''} — non trouvé`, 'warn'); }
+          addLog(`✓ ${nom} → ${result.nomLegal || '?'}${result.villeFound?' ('+result.villeFound+')':''} · ${result.siret} [${result.strategy}, ${result.confidence}%]`, 'ok');
+        } else { miss++; addLog(`✗ ${nom}${cp?' ('+cp+')':''} — ${result && result.reason ? result.reason : 'non trouvé'}`, 'warn'); }
         done++;
         const pctv = Math.round(done/targets.length*100);
         el('enrich-progress').style.width = pctv+'%';
