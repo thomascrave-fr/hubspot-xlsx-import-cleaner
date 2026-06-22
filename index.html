@@ -6,6 +6,7 @@
 <title>HubSpot Cleaner — Préparation des imports</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNyIgZmlsbD0iIzE0MjMzQSIvPjxwYXRoIGQ9Ik0xNiA2bDEuOCA1LjNhMyAzIDAgMCAwIDEuOSAxLjlMMjUgMTVsLTUuMyAxLjhhMyAzIDAgMCAwLTEuOSAxLjlMMTYgMjRsLTEuOC01LjNhMyAzIDAgMCAwLTEuOS0xLjlMNyAxNWw1LjMtMS44YTMgMyAwIDAgMCAxLjktMS45eiIgZmlsbD0iIzBFOUU3OCIvPjwvc3ZnPgo=">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
@@ -183,7 +184,7 @@ td.filled{background:var(--jade-soft)!important;color:var(--jade-deep);font-weig
   <span class="topbar-tag" id="topbar-tag">v2</span>
 </header>
 
-<input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none">
+<input type="file" id="file-input" accept=".xlsx,.xls,.csv,.zip" multiple style="display:none">
 
 <main class="shell">
 
@@ -198,8 +199,8 @@ td.filled{background:var(--jade-soft)!important;color:var(--jade-deep);font-weig
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 9 12 4 17 9"/><line x1="12" y1="4" x2="12" y2="16"/></svg>
       </div>
       <div class="dz-title">Glissez votre fichier ici</div>
-      <div class="dz-sub">ou cliquez pour le sélectionner</div>
-      <div class="dz-formats"><span class="fmt">.xlsx</span><span class="fmt">.xls</span><span class="fmt">.csv</span></div>
+      <div class="dz-sub">un ou plusieurs fichiers, ou un .zip exporté depuis Google Drive</div>
+      <div class="dz-formats"><span class="fmt">.xlsx</span><span class="fmt">.xls</span><span class="fmt">.csv</span><span class="fmt">.zip</span></div>
     </div>
 
     <div class="section-label">Dossier partagé de l'équipe</div>
@@ -307,6 +308,45 @@ function resolveCols(headers){
 }
 
 // ============================================================
+//  HARMONISATION — mappe des en-têtes variés vers un format commun
+//  et regroupe les colonnes notes/commentaires dans « Notes ».
+// ============================================================
+const CANONICAL_ORDER = [
+  'Evenement','Nom entreprise','Type établissement','Adresse entreprise','Adresse entreprise 2',
+  'Boîte postale','Code postal entreprise','Ville entreprise','Téléphone entreprise',
+  'Effectif entreprise','SIRET entreprise','Civilité','Prénom','Nom','Fonction',
+  'Mail prospect','Téléphone portable prospect','Mail CSE','Téléphone CSE',
+  'Commercial nom','Source du scan','Date et heure','Notes'
+];
+// Renvoie le nom canonique, '__NOTE' (à fusionner), ou null (colonne inconnue conservée telle quelle)
+function mapHeader(h){
+  const n = norm(h);
+  if(/commentaire|remarque|observation|tags|projet|^note$|^notes$|^note /.test(n)) return '__NOTE';
+  if(/evenement|^salon/.test(n)) return 'Evenement';
+  if(/cse.*(mail|email|courriel)|(mail|email|courriel).*cse/.test(n)) return 'Mail CSE';
+  if(/cse.*(tel|phone)|(tel|phone).*cse/.test(n)) return 'Téléphone CSE';
+  if(/(societe|entreprise).*(tel|phone)|(tel|phone).*(societe|entreprise)/.test(n)) return 'Téléphone entreprise';
+  if(/siret/.test(n)) return 'SIRET entreprise';
+  if(/effectif/.test(n)) return 'Effectif entreprise';
+  if(/code.?postal|^cp$/.test(n)) return 'Code postal entreprise';
+  if(/ville|locality|commune/.test(n)) return 'Ville entreprise';
+  if(/type.*etabl|entite/.test(n)) return 'Type établissement';
+  if(/boite postal|^bp$/.test(n)) return 'Boîte postale';
+  if(/adresse/.test(n)) return /\b2\b|complement/.test(n) ? 'Adresse entreprise 2' : 'Adresse entreprise';
+  if(/commercial/.test(n)) return 'Commercial nom';
+  if(/civilite/.test(n)) return 'Civilité';
+  if(/prenom/.test(n)) return 'Prénom';
+  if(/fonction|poste/.test(n)) return 'Fonction';
+  if(/source/.test(n)) return 'Source du scan';
+  if(/date/.test(n)) return 'Date et heure';
+  if(/mail|email|courriel/.test(n)) return 'Mail prospect';
+  if(/portable|mobile|tel|phone/.test(n)) return 'Téléphone portable prospect';
+  if(/^nom$|visiteur nom|nom complet|^nom /.test(n)) return 'Nom';
+  if(/societe|entreprise|etablissement|raison.?social/.test(n)) return 'Nom entreprise';
+  return null;
+}
+
+// ============================================================
 //  État global
 // ============================================================
 let fullRows = [], originalRows = [], headers = [], cols = {}, currentFilename = '', sheetName = '';
@@ -317,10 +357,10 @@ el('nav-home').addEventListener('click', goHome);
 el('dropzone').addEventListener('click', () => el('file-input').click());
 el('dropzone').addEventListener('keydown', e => { if(e.key==='Enter'||e.key===' '){ e.preventDefault(); el('file-input').click(); }});
 el('fb-replace').addEventListener('click', () => el('file-input').click());
-el('file-input').addEventListener('change', e => { if(e.target.files[0]) loadFile(e.target.files[0]); e.target.value=''; });
+el('file-input').addEventListener('change', e => { if(e.target.files.length) loadFiles(e.target.files); e.target.value=''; });
 el('dropzone').addEventListener('dragover', e => { e.preventDefault(); el('dropzone').classList.add('drag'); });
 el('dropzone').addEventListener('dragleave', () => el('dropzone').classList.remove('drag'));
-el('dropzone').addEventListener('drop', e => { e.preventDefault(); el('dropzone').classList.remove('drag'); if(e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+el('dropzone').addEventListener('drop', e => { e.preventDefault(); el('dropzone').classList.remove('drag'); if(e.dataTransfer.files.length) loadFiles(e.dataTransfer.files); });
 el('btn-process').addEventListener('click', runProcess);
 el('btn-stop').addEventListener('click', () => { stopFlag = true; });
 el('btn-export').addEventListener('click', exportFile);
@@ -372,35 +412,110 @@ function renderDrive(){
 }
 
 // ============================================================
-//  Lecture du fichier
+//  Lecture des fichiers (un, plusieurs, ou un .zip) + fusion
 // ============================================================
-function loadFile(file){
-  hideError();
-  const reader = new FileReader();
-  reader.onload = e => {
-    try{
-      const wb = XLSX.read(e.target.result, { type:'array' });
-      sheetName = wb.SheetNames[0];
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval:'' });
-      if(!rows.length){ showError("Le fichier semble vide ou sans en-têtes lisibles."); return; }
-      headers = Object.keys(rows[0]).filter(h => h && !/^__EMPTY/.test(h));
-      cols = resolveCols(headers);
-      const isEmpty = r => headers.every(h => (r[h]||'').toString().trim()==='');
-      fullRows = rows.filter(r => !isEmpty(r));
-      originalRows = fullRows.map(r => ({ ...r }));   // copie figée du fichier original
-      const emptyCount = rows.length - fullRows.length;
-      currentFilename = file.name;
-      renderWorkspace(file, rows.length, emptyCount);
-      showView('workspace');
-    }catch(err){
-      showError("Impossible de lire ce fichier. Vérifiez qu'il s'agit d'un .xlsx, .xls ou .csv valide.");
-    }
-  };
-  reader.onerror = () => showError("Erreur de lecture du fichier.");
-  reader.readAsArrayBuffer(file);
+function setLoadStatus(msg){
+  const dz = el('dropzone');
+  if(!msg){ dz.querySelector('.dz-title').textContent = 'Glissez votre fichier ici'; return; }
+  dz.querySelector('.dz-title').textContent = msg;
 }
 
-function renderWorkspace(file, totalRows, emptyCount){
+const SHEET_RE = /\.(xlsx|xls|csv)$/i;
+const isJunk = path => /(^|\/)__MACOSX\//.test(path) || /(^|\/)\.[^/]*$/.test(path);
+
+async function loadFiles(fileList){
+  hideError();
+  const files = Array.from(fileList);
+  if(!files.length) return;
+  setLoadStatus(`Lecture de ${files.length} élément(s)…`);
+
+  try{
+    // 1. Rassembler tous les classeurs (en dépliant les .zip)
+    const sheets = []; // {name, buf}
+    for(const f of files){
+      if(/\.zip$/i.test(f.name)){
+        const zip = await JSZip.loadAsync(await f.arrayBuffer());
+        for(const entry of Object.values(zip.files)){
+          if(entry.dir || isJunk(entry.name) || !SHEET_RE.test(entry.name)) continue;
+          sheets.push({ name: entry.name.split('/').pop(), buf: await entry.async('arraybuffer') });
+        }
+      } else if(SHEET_RE.test(f.name)){
+        sheets.push({ name: f.name, buf: await f.arrayBuffer() });
+      }
+    }
+    if(!sheets.length){ setLoadStatus(''); showError("Aucun fichier .xlsx, .xls ou .csv trouvé (zip inclus)."); return; }
+
+    // 2. Lire et HARMONISER (colonnes de même nature -> même colonne, notes regroupées)
+    const canonPresent = new Set();      // champs canoniques réellement rencontrés
+    const unknownOrder = [], unknownSet = new Set(); // colonnes inconnues conservées
+    const merged = [];
+    let emptyCount = 0, okFiles = 0, koFiles = 0;
+
+    for(let s=0; s<sheets.length; s++){
+      const sh = sheets[s];
+      setLoadStatus(`Lecture ${s+1}/${sheets.length} : ${sh.name}`);
+      await sleep(0);
+      let wb;
+      try{ wb = XLSX.read(sh.buf, { type:'array' }); }catch{ koFiles++; continue; }
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval:'' });
+      if(!rows.length){ koFiles++; continue; }
+      const hs = Object.keys(rows[0]).filter(h => h && !/^__EMPTY/.test(h));
+
+      // plan de mapping pour ce fichier
+      const plan = hs.map(h => ({ src:h, to:mapHeader(h) }));
+      const isEmpty = r => hs.every(h => (r[h]||'').toString().trim()==='');
+
+      let kept = 0;
+      rows.forEach(r => {
+        if(isEmpty(r)){ emptyCount++; return; }
+        const out = {};
+        const notes = [];
+        plan.forEach(({src, to}) => {
+          const v = (r[src]==null ? '' : r[src]).toString().trim();
+          if(to === '__NOTE'){ if(v && v !== '0') notes.push(`${src}: ${v}`); }
+          else if(to){ if(v && !out[to]){ out[to] = r[src]; canonPresent.add(to); } }
+          else { // colonne inconnue : conservée telle quelle
+            out[src] = r[src];
+            if(!unknownSet.has(src)){ unknownSet.add(src); unknownOrder.push(src); }
+          }
+        });
+        if(notes.length){ out['Notes'] = notes.join(' | '); canonPresent.add('Notes'); }
+        out['Fichier source'] = sh.name;
+        merged.push(out); kept++;
+      });
+      if(kept) okFiles++; else koFiles++;
+    }
+    if(!merged.length){ setLoadStatus(''); showError("Les fichiers semblent vides ou illisibles."); return; }
+
+    // ordre final des colonnes : canoniques (présentes) -> inconnues -> Fichier source
+    const headerOrder = CANONICAL_ORDER.filter(h => canonPresent.has(h))
+                          .concat(unknownOrder)
+                          .concat(['Fichier source']);
+
+    // 3. État global
+    headers = headerOrder;
+    cols = resolveCols(headers);
+    fullRows = merged;                              // déjà sans lignes vides
+    originalRows = fullRows.map(r => ({ ...r }));
+    const multi = sheets.length > 1;
+    currentFilename = multi ? `fusion_${okFiles}_fichiers` : sheets[0].name.replace(SHEET_RE,'');
+    sheetName = multi ? `${okFiles} fichiers fusionnés` : sheets[0].name;
+
+    setLoadStatus('');
+    renderWorkspace({
+      name: multi ? `Fusion de ${okFiles} fichiers` : sheets[0].name,
+      detail: `${multi ? okFiles+' fichiers · ' : ''}${formatFr(fullRows.length)} lignes utiles × ${headers.length} colonnes${koFiles?` · ${koFiles} ignoré(s)`:''}`,
+      emptyCount,
+    });
+    showView('workspace');
+  }catch(err){
+    setLoadStatus('');
+    showError("Erreur pendant la lecture des fichiers. Vérifiez le format (.xlsx, .xls, .csv ou .zip).");
+  }
+}
+
+function renderWorkspace(meta){
   const base = fullRows.length || 1;
   const val = (row, c) => (c||[]).map(x => (row[x]||'').toString().trim()).find(v=>v) || '';
   const withEmail = cols.emails.length ? fullRows.filter(r => val(r, cols.emails)).length : null;
@@ -410,8 +525,10 @@ function renderWorkspace(file, totalRows, emptyCount){
   const totalCells = fullRows.length * headers.length;
   const completeness = totalCells ? Math.round(filled/totalCells*100) : 0;
 
-  el('fb-name').textContent = file.name;
-  el('fb-detail').textContent = `${formatSize(file.size)} · feuille « ${sheetName} » · ${formatFr(fullRows.length)} lignes utiles × ${headers.length} colonnes`;
+  el('fb-name').textContent = meta.name;
+  el('fb-detail').textContent = meta.detail;
+
+  const emptyCount = meta.emptyCount || 0;
 
   const cards = [
     { label:'Lignes utiles',   value:fullRows.length, cls:'accent' },
@@ -444,9 +561,9 @@ function renderWorkspace(file, totalRows, emptyCount){
   renderOriginalPreview();
 }
 
-const PREVIEW_N = 20;
+const PREVIEW_N = 500;
 function renderTable(table, columns, rows){
-  const slice = rows;   // toutes les lignes
+  const slice = rows.slice(0, PREVIEW_N);   // aperçu plafonné (l'export contient tout)
   const isKnown = h => detectRole(h) || h==='Email principal' || h.indexOf("Nom de l'entreprise")===0 || h==='Phase du cycle de vie' || h==='Source du contact';
   table.querySelector('thead').innerHTML =
     '<tr><th><span class="idx">#</span></th>' +
@@ -461,18 +578,19 @@ function renderTable(table, columns, rows){
     }).join('') + '</tr>').join('');
   return rows.length;
 }
+function previewFoot(total){ return total > PREVIEW_N ? ` (aperçu des ${PREVIEW_N} premières)` : ''; }
 
 function renderOriginalPreview(){
   renderTable(el('table-orig'), headers, originalRows);
   el('orig-left').textContent = `${headers.length} colonnes`;
-  el('orig-right').textContent = `${formatFr(originalRows.length)} lignes utiles`;
+  el('orig-right').textContent = `${formatFr(originalRows.length)} lignes utiles${previewFoot(originalRows.length)}`;
 }
 
 function renderCleanedPreview(){
   const { outCols, rows } = buildOutput();
   renderTable(el('table-clean'), outCols, rows);
   el('clean-left').textContent = `${outCols.length} colonnes`;
-  el('clean-right').textContent = `${formatFr(rows.length)} lignes`;
+  el('clean-right').textContent = `${formatFr(rows.length)} lignes${previewFoot(rows.length)}`;
 }
 
 function switchTab(which){
