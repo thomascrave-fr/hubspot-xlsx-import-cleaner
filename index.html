@@ -553,24 +553,31 @@ const Sirene = {
     if(!res.ok) return [];
     const json = await res.json();
     return (json.results||[]).map(r => {
+      const siege = r.siege || {};
+      // Si on a filtré par code postal, on privilégie l'établissement SITUÉ dans ce CP
+      // (et non le siège, souvent ailleurs).
+      let pick = siege, usedEtab = false;
+      if(cp && Array.isArray(r.matching_etablissements)){
+        const e = r.matching_etablissements.find(x => /^\d{14}$/.test(((x&&x.siret)||'').toString()));
+        if(e){ pick = e; usedEtab = true; }
+      }
       // SIRET = 14 chiffres (≠ SIREN à 9). On ne retient qu'un SIRET valide.
-      const candidates = [r.siege?.siret, r.matching_etablissements?.[0]?.siret];
-      const siret = candidates.find(x => /^\d{14}$/.test((x||'').toString())) || null;
+      const siret = /^\d{14}$/.test((pick.siret||'').toString()) ? pick.siret
+                  : (/^\d{14}$/.test((siege.siret||'').toString()) ? siege.siret : null);
       return {
         siret,
         nomLegal: r.nom_complet || r.nom_raison_sociale || '',
-        cpFound: r.siege?.code_postal || '',
-        villeFound: r.siege?.libelle_commune || '',
-        adresseFound: r.siege?.adresse || r.siege?.libelle_voie || '',
+        cpFound: pick.code_postal || (usedEtab ? cp : '') || siege.code_postal || '',
+        villeFound: pick.libelle_commune || siege.libelle_commune || '',
+        adresseFound: pick.adresse || siege.adresse || siege.libelle_voie || '',
         effectif: Sirene.EFFECTIF[r.tranche_effectif_salarie] || '',
       };
     });
   },
 
-  // Le NOM est obligatoire : sans correspondance de nom, on refuse (évite les faux
-  // positifs sur le seul CP). CP et ville affinent. En recherche large, le CP ne pénalise pas.
-  score(cand, src, opts){
-    opts = opts || {};
+  // Le NOM est obligatoire. Quand le fichier a un CP, celui-ci fait foi :
+  // un CP qui correspond confirme fortement, un CP différent disqualifie.
+  score(cand, src){
     let nameConf = 0;
     if(src.nom && cand.nomLegal){
       const n1 = Sirene.normalize(src.nom), n2 = Sirene.normalize(cand.nomLegal);
@@ -584,7 +591,7 @@ const Sirene = {
     let conf = nameConf;
     if(src.cp && cand.cpFound){
       const match = src.cp.replace(/\s/g,'') === cand.cpFound.replace(/\s/g,'');
-      conf += match ? 30 : (opts.noCpPenalty ? 0 : -10);
+      conf += match ? 35 : -45;   // CP du fichier = arbitre : on rejette les mauvais CP
     }
     if(src.ville && cand.villeFound){
       const v1 = Sirene.normalize(src.ville), v2 = Sirene.normalize(cand.villeFound);
@@ -596,9 +603,9 @@ const Sirene = {
   async search(nom, adresse, cp, ville){
     if(!nom) return { siret:null, reason:'nom manquant' };
     const strat = [];
-    if(cp)    strat.push({ q:nom,                 cp,    loose:false, label:'nom+CP' });
-    if(ville) strat.push({ q:`${nom} ${ville}`,   cp:'', loose:true,  label:'nom+ville' });
-    strat.push({ q:nom, cp:'', loose:true, label:'nom seul' });   // repli large, comme une recherche Google
+    if(cp)    strat.push({ q:nom,               cp,    label:'nom+CP' });
+    if(ville) strat.push({ q:`${nom} ${ville}`, cp:'', label:'nom+ville' });
+    strat.push({ q:nom, cp:'', label:'nom seul' });   // repli pour les lignes sans CP
 
     let best = null, anyCandidate = false, i = 0;
     for(const s of strat){
@@ -608,7 +615,7 @@ const Sirene = {
       if(!cands.length) continue;
       anyCandidate = true;
       const scored = cands
-        .map(c => ({ ...c, confidence:Sirene.score(c, {nom,cp,ville}, {noCpPenalty:s.loose}), strategy:s.label }))
+        .map(c => ({ ...c, confidence:Sirene.score(c, {nom,cp,ville}), strategy:s.label }))
         .sort((a,b)=>b.confidence-a.confidence);
       if(!best || scored[0].confidence > best.confidence) best = scored[0];
       if(best.confidence >= 75) break;   // match franc : inutile de continuer
