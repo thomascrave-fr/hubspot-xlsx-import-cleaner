@@ -341,8 +341,8 @@ function mapHeader(h){
   if(/date/.test(n)) return 'Date et heure';
   if(/mail|email|courriel/.test(n)) return 'Mail prospect';
   if(/portable|mobile|tel|phone/.test(n)) return 'Téléphone portable prospect';
-  if(/^nom$|visiteur nom|nom complet|^nom /.test(n)) return 'Nom';
-  if(/societe|entreprise|etablissement|raison.?social/.test(n)) return 'Nom entreprise';
+  if(/entreprise|etablissement|raison.?social|societe|^nom soc/.test(n)) return 'Nom entreprise';
+  if(/^nom\b|nom complet|visiteur nom|nom contact|nom prospect|nom du /.test(n)) return 'Nom';
   return null;
 }
 
@@ -704,10 +704,16 @@ const Sirene = {
       // SIRET = 14 chiffres (≠ SIREN à 9). On ne retient qu'un SIRET valide.
       const siret = /^\d{14}$/.test((pick.siret||'').toString()) ? pick.siret
                   : (/^\d{14}$/.test((siege.siret||'').toString()) ? siege.siret : null);
+      // Noms à comparer : dénomination légale + sigle + enseignes (noms commerciaux)
+      const enseignes = [];
+      (r.matching_etablissements||[]).forEach(e => (e.liste_enseignes||[]).forEach(x => x && enseignes.push(x)));
+      (siege.liste_enseignes||[]).forEach(x => x && enseignes.push(x));
+      const names = [r.nom_complet, r.nom_raison_sociale, r.sigle].concat(enseignes).filter(Boolean);
       return {
         siret,
         siren: r.siren || '',
         nomLegal: r.nom_complet || r.nom_raison_sociale || '',
+        names,
         cpFound: pick.code_postal || (usedEtab ? cp : '') || siege.code_postal || '',
         villeFound: pick.libelle_commune || siege.libelle_commune || '',
         adresseFound: pick.adresse || siege.adresse || siege.libelle_voie || '',
@@ -717,18 +723,27 @@ const Sirene = {
     });
   },
 
-  // Le NOM est obligatoire. Quand le fichier a un CP, celui-ci fait foi :
-  // un CP qui correspond confirme fortement, un CP différent disqualifie.
-  score(cand, src){
-    let nameConf = 0;
-    if(src.nom && cand.nomLegal){
-      const n1 = Sirene.normalize(src.nom), n2 = Sirene.normalize(cand.nomLegal);
-      if(n1 && n2){
-        if(n1 === n2) nameConf = 60;
-        else if(n2.includes(n1) || n1.includes(n2)) nameConf = 50;
-        else { const j = Sirene.jaccard(n1, n2); nameConf = j>0.55?45 : j>0.35?30 : j>0.2?15 : 0; }
-      }
+  // Le NOM est obligatoire. On compare à la dénomination légale ET aux enseignes
+  // (noms commerciaux), car beaucoup d'établissements (crèches, enseignes…) ont un
+  // nom commercial ≠ dénomination. Quand le fichier a un CP, celui-ci fait foi.
+  nameScore(srcNom, names){
+    const n1 = Sirene.normalize(srcNom);
+    if(!n1 || !names || !names.length) return 0;
+    let best = 0;
+    for(const nm of names){
+      const n2 = Sirene.normalize(nm);
+      if(!n2) continue;
+      let v;
+      if(n1 === n2) v = 60;
+      else if(n2.includes(n1) || n1.includes(n2)) v = 50;
+      else { const j = Sirene.jaccard(n1, n2); v = j>0.55?45 : j>0.35?30 : j>0.2?15 : 0; }
+      if(v > best) best = v;
     }
+    return best;
+  },
+  score(cand, src){
+    const names = (cand.names && cand.names.length) ? cand.names : [cand.nomLegal];
+    let nameConf = Sirene.nameScore(src.nom, names);
     if(nameConf === 0 || !cand.siret) return 0;
     let conf = nameConf;
     if(src.cp && cand.cpFound){
