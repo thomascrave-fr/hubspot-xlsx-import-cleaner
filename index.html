@@ -681,12 +681,15 @@ const Sirene = {
   EFFECTIF: {'00':'0 salarié','01':'1 ou 2 salariés','02':'3 à 5 salariés','03':'6 à 9 salariés','11':'10 à 19 salariés','12':'20 à 49 salariés','21':'50 à 99 salariés','22':'100 à 199 salariés','31':'200 à 249 salariés','32':'250 à 499 salariés','41':'500 à 999 salariés','42':'1 000 à 1 999 salariés','51':'2 000 à 4 999 salariés','52':'5 000 à 9 999 salariés','53':'10 000 salariés et plus'},
 
   cleanStr: v => (v||'').toString().trim().replace(/\s+/g,' '),
+  // Département à partir d'un code postal (gère les CEDEX et l'outre-mer)
+  deptFromCp: cp => { const s=(cp||'').toString().replace(/\s/g,''); return /^9[78]\d/.test(s) ? s.slice(0,3) : s.slice(0,2); },
   normalize: s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\b(la|le|les|de|du|des|et|sa|sas|sarl|eurl|asso|association|ste|societe)\b/g,'').replace(/\s+/g,' ').trim(),
   jaccard(a,b){const bg=s=>{const set=new Set();for(let i=0;i<s.length-1;i++)set.add(s.slice(i,i+2));return set;};const ba=bg(a),bb=bg(b);const inter=[...ba].filter(x=>bb.has(x)).length;const uni=new Set([...ba,...bb]).size;return uni?inter/uni:0;},
 
-  async callApi(q, cp){
+  async callApi(q, cp, dept){
     const params = new URLSearchParams({ q:q.substring(0,100), per_page:'20' });
     if(cp) params.set('code_postal', cp);
+    else if(dept) params.set('departement', dept);
     const url = 'https://recherche-entreprises.api.gouv.fr/search?'+params.toString();
     let res = await fetch(url);
     if(res.status === 429){ await sleep(1200); res = await fetch(url); } // limite de débit : on patiente et on réessaie
@@ -694,10 +697,10 @@ const Sirene = {
     const json = await res.json();
     return (json.results||[]).map(r => {
       const siege = r.siege || {};
-      // Si on a filtré par code postal, on privilégie l'établissement SITUÉ dans ce CP
-      // (et non le siège, souvent ailleurs).
+      // Si on a filtré (CP ou département), on privilégie l'établissement correspondant
+      // (l'agence locale), pas le siège souvent ailleurs.
       let pick = siege, usedEtab = false;
-      if(cp && Array.isArray(r.matching_etablissements)){
+      if((cp || dept) && Array.isArray(r.matching_etablissements)){
         const e = r.matching_etablissements.find(x => /^\d{14}$/.test(((x&&x.siret)||'').toString()));
         if(e){ pick = e; usedEtab = true; }
       }
@@ -747,8 +750,8 @@ const Sirene = {
     if(nameConf === 0 || !cand.siret) return 0;
     let conf = nameConf;
     if(src.cp && cand.cpFound){
-      const match = src.cp.replace(/\s/g,'') === cand.cpFound.replace(/\s/g,'');
-      conf += match ? 35 : -45;   // CP du fichier = arbitre : on rejette les mauvais CP
+      const d1 = Sirene.deptFromCp(src.cp), d2 = Sirene.deptFromCp(cand.cpFound);
+      conf += (d1 && d1 === d2) ? 35 : -45;   // même département = arbitre (gère CEDEX/agences) ; autre dept = rejeté
     }
     if(src.ville && cand.villeFound){
       const v1 = Sirene.normalize(src.ville), v2 = Sirene.normalize(cand.villeFound);
@@ -770,16 +773,18 @@ const Sirene = {
 
   async search(nom, adresse, cp, ville){
     if(!nom) return { siret:null, reason:'nom manquant' };
+    const dept = Sirene.deptFromCp(cp);
     const strat = [];
-    if(cp)    strat.push({ q:nom,               cp,    label:'nom+CP' });
-    if(ville) strat.push({ q:`${nom} ${ville}`, cp:'', label:'nom+ville' });
-    strat.push({ q:nom, cp:'', label:'nom seul' });   // repli pour les lignes sans CP
+    if(cp)    strat.push({ q:nom,               cp,           label:'nom+CP' });
+    if(dept)  strat.push({ q:nom,               dept,         label:'nom+dépt' });   // agence locale / CEDEX
+    if(ville) strat.push({ q:`${nom} ${ville}`,               label:'nom+ville' });
+    strat.push({ q:nom, label:'nom seul' });   // repli pour les lignes sans CP
 
     let best = null, anyCandidate = false, i = 0;
     for(const s of strat){
       if(i++) await sleep(90);
       let cands;
-      try{ cands = await Sirene.callApi(s.q, s.cp); }catch{ continue; }
+      try{ cands = await Sirene.callApi(s.q, s.cp, s.dept); }catch{ continue; }
       if(!cands.length) continue;
       anyCandidate = true;
       const scored = cands
