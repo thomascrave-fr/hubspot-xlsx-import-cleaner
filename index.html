@@ -578,7 +578,7 @@ function renderWorkspace(meta){
 const PREVIEW_N = 500;
 function renderTable(table, columns, rows){
   const slice = rows.slice(0, PREVIEW_N);   // aperçu plafonné (l'export contient tout)
-  const isKnown = h => detectRole(h) || h==='Email principal' || h.indexOf("Nom de l'entreprise")===0 || h==='Phase du cycle de vie' || h==='Source du contact';
+  const isKnown = h => detectRole(h) || h==='E-mail principal' || h==='E-mails supplémentaires' || h.indexOf("Nom de l'entreprise")===0 || h==='Source du contact';
   table.querySelector('thead').innerHTML =
     '<tr><th><span class="idx">#</span></th>' +
     columns.map((h,i) => `<th class="${isKnown(h)?'known':''}"><span class="idx">${String(i+1).padStart(2,'0')}</span>${escapeHtml(h)}</th>`).join('') + '</tr>';
@@ -934,22 +934,20 @@ const COMPANY_COL_2 = "Nom de l'entreprise - contact";
 function buildOutput(){
   const emailsPresent = cols.emails.length > 0;
 
-  // Colonnes entièrement vides → supprimées (on garde toujours la colonne entreprise
-  // car elle alimente les deux colonnes dupliquées demandées)
+  // Colonnes entièrement vides → supprimées (on garde toujours la colonne entreprise).
+  // Les colonnes email brutes sont retirées : elles sont remplacées par
+  // « E-mail principal » + « E-mails supplémentaires » (un email = une seule colonne).
   const nonEmptyHeader = h => fullRows.some(r => (r[h]||'').toString().trim() !== '');
-  const keptHeaders = headers.filter(h => h === cols.company || nonEmptyHeader(h));
+  const keptHeaders = headers.filter(h => !cols.emails.includes(h) && (h === cols.company || nonEmptyHeader(h)));
 
   // Ordre des colonnes de sortie
   const outCols = [];
-  if(emailsPresent) outCols.push('Email principal');
+  if(emailsPresent) outCols.push('E-mail principal', 'E-mails supplémentaires');
   keptHeaders.forEach(h => {
     if(cols.company && h === cols.company){ outCols.push(COMPANY_COL_1, COMPANY_COL_2); }
     else outCols.push(h);
   });
-  outCols.push('Code NAF', 'Libellé NAF', 'Phase du cycle de vie', 'Source du contact');
-
-  const seenEmail = new Set();
-  let removedEmails = 0;
+  outCols.push('Code NAF', 'Libellé NAF', 'Source du contact');
 
   const rows = fullRows.map(src => {
     const r = {};
@@ -967,51 +965,51 @@ function buildOutput(){
     if(cols.ville     && r[cols.ville])     r[cols.ville]     = properCase(r[cols.ville], {company:true});
     const companyName = cols.company ? properCase((r[cols.company]||'').toString(), {company:true}) : '';
 
-    // Email principal + dédoublonnage
-    let email = '';
-    if(emailsPresent){
-      email = cols.emails.map(c => (r[c]||'').toString().trim()).find(v=>v) || '';
-      const key = email.toLowerCase();
-      if(email && seenEmail.has(key)){
-        cols.emails.forEach(c => { if((r[c]||'').toString().trim().toLowerCase() === key) r[c] = ''; });
-        email = '';
-        removedEmails++;
-      } else if(email){ seenEmail.add(key); }
-    }
+    // Emails : 1er trouvé = principal (toujours prioritaire), les autres (dédoublonnés) = supplémentaires.
+    // Un même email n'apparaît jamais deux fois.
+    const emailList = [], seen = new Set();
+    cols.emails.forEach(c => {
+      (r[c]||'').toString().split(/[;,]/).forEach(part => {
+        const v = part.trim();
+        if(v && v.includes('@')){ const k = v.toLowerCase(); if(!seen.has(k)){ seen.add(k); emailList.push(v); } }
+      });
+    });
+    const emailPrincipal = emailList[0] || '';
+    const emailSupp = emailList.slice(1).join(', ');
 
     // Objet de sortie dans l'ordre voulu
     const out = {};
     out.__filled = {};
     outCols.forEach(c => {
-      if(c === 'Email principal') out[c] = email;
+      if(c === 'E-mail principal') out[c] = emailPrincipal;
+      else if(c === 'E-mails supplémentaires') out[c] = emailSupp;
       else if(c === COMPANY_COL_1 || c === COMPANY_COL_2) out[c] = companyName;
       else if(c === 'Code NAF'){ out[c] = src.__nafCode || ''; if(src.__nafCode) out.__filled[c] = true; }
       else if(c === 'Libellé NAF'){ out[c] = src.__nafLabel || ''; if(src.__nafLabel) out.__filled[c] = true; }
-      else if(c === 'Phase du cycle de vie') out[c] = 'Lead';
       else if(c === 'Source du contact') out[c] = 'Salon';
       else { out[c] = r[c] ?? ''; if(src.__filled && src.__filled[c]) out.__filled[c] = true; }
     });
     return out;
   });
 
-  return { outCols, rows, removedEmails };
+  return { outCols, rows };
 }
 
 function buildWorkbook(){
-  const { outCols, rows, removedEmails } = buildOutput();
+  const { outCols, rows } = buildOutput();
   const aoa = [outCols, ...rows.map(r => outCols.map(c => r[c] ?? ''))];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!cols'] = outCols.map(() => ({ wch:22 }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Contacts');
-  return { wb, count: rows.length, removedEmails };
+  return { wb, count: rows.length };
 }
 function outName(){
   const base = currentFilename.replace(/\.(xlsx|xls|csv)$/i,'');
   return `${base}_nettoye_${new Date().toISOString().slice(0,10)}.xlsx`;
 }
 async function exportFile(){
-  const { wb, count, removedEmails } = buildWorkbook();
+  const { wb, count } = buildWorkbook();
   const name = outName();
   const arr = XLSX.write(wb, { bookType:'xlsx', type:'array' });
   const blob = new Blob([arr], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -1027,7 +1025,7 @@ async function exportFile(){
   const note = el('export-note');
   const link = (SHARED_DRIVE_URL && /^https?:\/\//.test(SHARED_DRIVE_URL))
     ? `<a href="${SHARED_DRIVE_URL}" target="_blank" rel="noopener">Ouvrir le drive →</a>` : '';
-  note.innerHTML = `✓ « ${escapeHtml(name)} » téléchargé (${formatFr(count)} contacts${removedEmails?`, ${formatFr(removedEmails)} email(s) en doublon vidé(s)`:''}). Pensez à le déposer dans le drive partagé de l'équipe.${link}`;
+  note.innerHTML = `✓ « ${escapeHtml(name)} » téléchargé (${formatFr(count)} contacts). Pensez à le déposer dans le drive partagé de l'équipe.${link}`;
   note.classList.add('show');
 }
 
