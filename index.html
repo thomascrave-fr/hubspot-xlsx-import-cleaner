@@ -578,7 +578,7 @@ function renderWorkspace(meta){
 const PREVIEW_N = 500;
 function renderTable(table, columns, rows){
   const slice = rows.slice(0, PREVIEW_N);   // aperçu plafonné (l'export contient tout)
-  const isKnown = h => detectRole(h) || h==='E-mail principal' || h==='E-mails supplémentaires' || h.indexOf("Nom de l'entreprise")===0 || h==='Source du contact';
+  const isKnown = h => detectRole(h) || h==='E-mail principal' || h==='E-mails supplémentaires' || h==='Autres contacts' || h.indexOf("Nom de l'entreprise")===0 || h==='Source du contact';
   table.querySelector('thead').innerHTML =
     '<tr><th><span class="idx">#</span></th>' +
     columns.map((h,i) => `<th class="${isKnown(h)?'known':''}"><span class="idx">${String(i+1).padStart(2,'0')}</span>${escapeHtml(h)}</th>`).join('') + '</tr>';
@@ -934,6 +934,65 @@ const COMPANY_COL_2 = "Nom de l'entreprise - contact";
 function buildOutput(){
   const emailsPresent = cols.emails.length > 0;
 
+  // ----- Pré-analyse des emails entre TOUS les contacts -----
+  // Chaque adresse n'est conservée que sur le 1er contact qui la porte.
+  // Un contact qui se retrouve sans aucune adresse est "en doublon" : il ne sera
+  // pas importé, mais on garde sa trace dans le champ « Autres contacts » du
+  // contact propriétaire de l'adresse.
+  const rowEmailsOf = src => {
+    const list = [], seen = new Set();
+    cols.emails.forEach(c => (src[c]||'').toString().split(/[;,]/).forEach(p => {
+      const v = p.trim();
+      if(v && v.includes('@')){ const k = v.toLowerCase(); if(!seen.has(k)){ seen.add(k); list.push(v); } }
+    }));
+    return list;
+  };
+  const emailOwner = new Map();   // adresse (minuscule) -> index du contact propriétaire
+  const plan = fullRows.map(() => ({ principal:'', supp:'', isDup:false, isFolded:false, others:[], companyContacts:null }));
+  fullRows.forEach((src, i) => {
+    const re = rowEmailsOf(src);
+    if(!re.length) return;   // contact sans email : traité plus bas (repli entreprise éventuel)
+    const fresh = re.filter(e => !emailOwner.has(e.toLowerCase()));
+    if(fresh.length){
+      plan[i].principal = fresh[0];
+      plan[i].supp = fresh.slice(1).join(', ');
+      fresh.forEach(e => emailOwner.set(e.toLowerCase(), i));
+    } else {
+      plan[i].isDup = true;
+      const owner = emailOwner.get(re[0].toLowerCase());
+      if(owner != null) plan[owner].others.push(src);
+    }
+  });
+
+  // Entreprises dont AUCUN contact n'a d'email : on n'en garde qu'UNE ligne (niveau
+  // entreprise, aucun contact créé) et on liste tous ses contacts dans la note.
+  const cnorm = s => Sirene.normalize((s||'').toString());
+  if(cols.company){
+    const companyHasEmail = new Set();
+    fullRows.forEach((src, i) => { if(plan[i].principal){ const cn = cnorm(src[cols.company]); if(cn) companyHasEmail.add(cn); } });
+    const companyRep = new Map();
+    fullRows.forEach((src, i) => {
+      if(plan[i].isDup || plan[i].principal) return;
+      const cn = cnorm(src[cols.company]);
+      if(!cn || companyHasEmail.has(cn)) return;   // pas concerné
+      if(!companyRep.has(cn)){ companyRep.set(cn, i); plan[i].companyContacts = [src]; }
+      else { plan[companyRep.get(cn)].companyContacts.push(src); plan[i].isFolded = true; }
+    });
+  }
+  const anyNote = plan.some(p => p.others.length || (p.companyContacts && p.companyContacts.length));
+
+  // Bloc texte décrivant un contact non importé (pour « Autres contacts »)
+  const get = (src, h) => (src[h]==null ? '' : src[h]).toString().trim();
+  const contactBlock = (src, n) => {
+    const lines = [`Contact ${n} :`];
+    lines.push(`* Nom : ${cols.lastname ? properCase(get(src, cols.lastname)) : ''}`);
+    lines.push(`* Prénom : ${cols.firstname ? properCase(get(src, cols.firstname)) : ''}`);
+    lines.push(`* Poste : ${get(src, 'Fonction')}`);
+    const tel = get(src, 'Téléphone portable prospect'); if(tel) lines.push(`* Téléphone : ${formatPhone(tel)}`);
+    const civ = get(src, 'Civilité'); if(civ) lines.push(`* Civilité : ${civ}`);
+    return lines.join('\n');
+  };
+
   // Colonnes entièrement vides → supprimées (on garde toujours la colonne entreprise).
   // Les colonnes email brutes sont retirées : elles sont remplacées par
   // « E-mail principal » + « E-mails supplémentaires » (un email = une seule colonne).
@@ -947,9 +1006,13 @@ function buildOutput(){
     if(cols.company && h === cols.company){ outCols.push(COMPANY_COL_1, COMPANY_COL_2); }
     else outCols.push(h);
   });
-  outCols.push('Code NAF', 'Libellé NAF', 'Source du contact');
+  outCols.push('Code NAF', 'Libellé NAF');
+  if(anyNote) outCols.push('Autres contacts');
+  outCols.push('Source du contact');
 
-  const rows = fullRows.map(src => {
+  const rows = fullRows.map((src, i) => {
+    if(plan[i].isDup || plan[i].isFolded) return null;   // contact replié dans une note
+
     const r = {};
     headers.forEach(h => r[h] = (src[h]==null ? '' : src[h]));
 
@@ -965,17 +1028,11 @@ function buildOutput(){
     if(cols.ville     && r[cols.ville])     r[cols.ville]     = properCase(r[cols.ville], {company:true});
     const companyName = cols.company ? properCase((r[cols.company]||'').toString(), {company:true}) : '';
 
-    // Emails : 1er trouvé = principal (toujours prioritaire), les autres (dédoublonnés) = supplémentaires.
-    // Un même email n'apparaît jamais deux fois.
-    const emailList = [], seen = new Set();
-    cols.emails.forEach(c => {
-      (r[c]||'').toString().split(/[;,]/).forEach(part => {
-        const v = part.trim();
-        if(v && v.includes('@')){ const k = v.toLowerCase(); if(!seen.has(k)){ seen.add(k); emailList.push(v); } }
-      });
-    });
-    const emailPrincipal = emailList[0] || '';
-    const emailSupp = emailList.slice(1).join(', ');
+    const emailPrincipal = plan[i].principal;
+    const emailSupp = plan[i].supp;
+    const noteSrc = plan[i].companyContacts || plan[i].others;   // entreprise sans email -> tous ; sinon -> les doublons
+    const autresContacts = (noteSrc && noteSrc.length)
+      ? noteSrc.map((o, k) => contactBlock(o, k+1)).join('\n\n') : '';
 
     // Objet de sortie dans l'ordre voulu
     const out = {};
@@ -983,6 +1040,7 @@ function buildOutput(){
     outCols.forEach(c => {
       if(c === 'E-mail principal') out[c] = emailPrincipal;
       else if(c === 'E-mails supplémentaires') out[c] = emailSupp;
+      else if(c === 'Autres contacts'){ out[c] = autresContacts; if(autresContacts) out.__filled[c] = true; }
       else if(c === COMPANY_COL_1 || c === COMPANY_COL_2) out[c] = companyName;
       else if(c === 'Code NAF'){ out[c] = src.__nafCode || ''; if(src.__nafCode) out.__filled[c] = true; }
       else if(c === 'Libellé NAF'){ out[c] = src.__nafLabel || ''; if(src.__nafLabel) out.__filled[c] = true; }
@@ -990,7 +1048,7 @@ function buildOutput(){
       else { out[c] = r[c] ?? ''; if(src.__filled && src.__filled[c]) out.__filled[c] = true; }
     });
     return out;
-  });
+  }).filter(Boolean);
 
   return { outCols, rows };
 }
