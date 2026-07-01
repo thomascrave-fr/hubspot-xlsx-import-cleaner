@@ -151,6 +151,7 @@ table{border-collapse:collapse;width:100%;font-size:12.5px}
 th{position:sticky;top:0;z-index:1;background:var(--ink);color:#fff;text-align:left;font-weight:600;font-size:11px;letter-spacing:.02em;white-space:nowrap;padding:11px 13px}
 th.known{color:#9BE6CC}
 th .idx{font-family:'JetBrains Mono',monospace;color:rgba(255,255,255,.4);font-size:9px;display:block}
+th .pct{font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:600;display:block;margin-top:3px;letter-spacing:.03em}
 td{padding:8px 13px;border-bottom:1px solid var(--line-soft);white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis;color:var(--ink-soft)}
 tr:nth-child(even) td{background:#FBFCFD}
 td.empty{color:var(--faint);font-style:italic}
@@ -576,12 +577,18 @@ function renderWorkspace(meta){
 }
 
 const PREVIEW_N = 500;
-function renderTable(table, columns, rows){
+function renderTable(table, columns, rows, showPct){
   const slice = rows.slice(0, PREVIEW_N);   // aperçu plafonné (l'export contient tout)
+  const total = rows.length || 1;
+  const pctOf = h => Math.round(rows.reduce((n,r) => n + ((r[h]==null?'':r[h]).toString().trim()!=='' ? 1 : 0), 0) / total * 100);
+  const pctColor = p => p>=80 ? '#9BE6CC' : (p>=40 ? 'rgba(255,255,255,.55)' : '#F0B49E');
   const isKnown = h => detectRole(h) || h==='E-mail principal' || h==='E-mails supplémentaires' || h==='Autres contacts' || h.indexOf("Nom de l'entreprise")===0 || h==='Source du contact';
   table.querySelector('thead').innerHTML =
     '<tr><th><span class="idx">#</span></th>' +
-    columns.map((h,i) => `<th class="${isKnown(h)?'known':''}"><span class="idx">${String(i+1).padStart(2,'0')}</span>${escapeHtml(h)}</th>`).join('') + '</tr>';
+    columns.map((h,i) => {
+      const pct = showPct ? `<span class="pct" style="color:${pctColor(pctOf(h))}">${pctOf(h)}%</span>` : '';
+      return `<th class="${isKnown(h)?'known':''}"><span class="idx">${String(i+1).padStart(2,'0')}</span>${escapeHtml(h)}${pct}</th>`;
+    }).join('') + '</tr>';
   table.querySelector('tbody').innerHTML = slice.map((row,i) =>
     `<tr><td style="color:var(--faint);font-family:JetBrains Mono,monospace">${i+1}</td>` +
     columns.map(h => {
@@ -602,7 +609,7 @@ function renderOriginalPreview(){
 
 function renderCleanedPreview(){
   const { outCols, rows } = buildOutput();
-  renderTable(el('table-clean'), outCols, rows);
+  renderTable(el('table-clean'), outCols, rows, true);
   el('clean-left').textContent = `${outCols.length} colonnes`;
   el('clean-right').textContent = `${formatFr(rows.length)} lignes${previewFoot(rows.length)}`;
 }
