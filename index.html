@@ -322,28 +322,28 @@ const CANONICAL_ORDER = [
 // Renvoie le nom canonique, '__NOTE' (à fusionner), ou null (colonne inconnue conservée telle quelle)
 function mapHeader(h){
   const n = norm(h);
-  if(/commentaire|remarque|observation|tags|projet|^note$|^notes$|^note /.test(n)) return '__NOTE';
-  if(/evenement|^salon/.test(n)) return 'Evenement';
+  if(/commentaire|remarque|observation|tags|projet|historique|^note$|^notes$|^note /.test(n)) return '__NOTE';
+  if(/evenement|^salon|^event/.test(n)) return 'Evenement';
   if(/cse.*(mail|email|courriel)|(mail|email|courriel).*cse/.test(n)) return 'Mail CSE';
   if(/cse.*(tel|phone)|(tel|phone).*cse/.test(n)) return 'Téléphone CSE';
   if(/(societe|entreprise).*(tel|phone)|(tel|phone).*(societe|entreprise)/.test(n)) return 'Téléphone entreprise';
   if(/siret/.test(n)) return 'SIRET entreprise';
-  if(/effectif/.test(n)) return 'Effectif entreprise';
-  if(/code.?postal|^cp$/.test(n)) return 'Code postal entreprise';
-  if(/ville|locality|commune/.test(n)) return 'Ville entreprise';
+  if(/effectif|nb.?staff|headcount|nombre.*salarie|nb.?salarie|staff/.test(n)) return 'Effectif entreprise';
+  if(/code.?postal|^cp$|zip|postal.?code|postcode/.test(n)) return 'Code postal entreprise';
+  if(/ville|locality|commune|^city$|^town$/.test(n)) return 'Ville entreprise';
   if(/type.*etabl|entite/.test(n)) return 'Type établissement';
   if(/boite postal|^bp$/.test(n)) return 'Boîte postale';
-  if(/adresse/.test(n)) return /\b2\b|complement/.test(n) ? 'Adresse entreprise 2' : 'Adresse entreprise';
-  if(/commercial/.test(n)) return 'Commercial nom';
-  if(/civilite/.test(n)) return 'Civilité';
-  if(/prenom/.test(n)) return 'Prénom';
-  if(/fonction|poste/.test(n)) return 'Fonction';
+  if(/adresse|address/.test(n)) return /\b2\b|complement/.test(n) ? 'Adresse entreprise 2' : 'Adresse entreprise';
+  if(/commercial|auteur/.test(n)) return 'Commercial nom';
+  if(/civilite|civility|^title$|salutation/.test(n)) return 'Civilité';
+  if(/prenom|first.?name|given.?name/.test(n)) return 'Prénom';
+  if(/fonction|poste|job.?title|position/.test(n)) return 'Fonction';
   if(/source/.test(n)) return 'Source du scan';
   if(/date/.test(n)) return 'Date et heure';
   if(/mail|email|courriel/.test(n)) return 'Mail prospect';
   if(/portable|mobile|tel|phone/.test(n)) return 'Téléphone portable prospect';
-  if(/entreprise|etablissement|raison.?social|societe|^nom soc/.test(n)) return 'Nom entreprise';
-  if(/^nom\b|nom complet|visiteur nom|nom contact|nom prospect|nom du /.test(n)) return 'Nom';
+  if(/entreprise|etablissement|raison.?social|societe|company|^nom soc/.test(n)) return 'Nom entreprise';
+  if(/^nom\b|nom complet|visiteur nom|nom contact|nom prospect|nom du |last.?name|surname|family.?name/.test(n)) return 'Nom';
   return null;
 }
 
@@ -437,6 +437,22 @@ function readWorkbook(name, buf){
   if(/\.csv$/i.test(name)) return XLSX.read(decodeCsv(buf), { type:'string' });
   return XLSX.read(buf, { type:'array' });
 }
+// Repère la ligne d'en-tête : celle qui contient le plus de colonnes reconnues.
+// Gère les fichiers avec une bannière avant les en-têtes, et détecte l'absence d'en-tête.
+function pickHeaderRow(aoa){
+  const limit = Math.min(aoa.length, 8);
+  let best = -1, bestScore = 0;
+  for(let i=0; i<limit; i++){
+    const row = aoa[i] || [];
+    let score = 0;
+    row.forEach(c => {
+      const s = (c==null?'':c).toString().trim();
+      if(s && s.length <= 60 && mapHeader(s)) score++;
+    });
+    if(score > bestScore){ bestScore = score; best = i; }
+  }
+  return bestScore >= 2 ? best : -1;   // moins de 2 colonnes reconnues = pas d'en-tête exploitable
+}
 
 async function loadFiles(fileList){
   hideError();
@@ -462,8 +478,8 @@ async function loadFiles(fileList){
 
     // 2. Lire et HARMONISER (colonnes de même nature -> même colonne, notes regroupées)
     const canonPresent = new Set();      // champs canoniques réellement rencontrés
-    const unknownOrder = [], unknownSet = new Set(); // colonnes inconnues conservées
     const merged = [];
+    const skipped = [];                  // fichiers sans en-tête exploitable
     let emptyCount = 0, okFiles = 0, koFiles = 0;
 
     for(let s=0; s<sheets.length; s++){
@@ -473,13 +489,20 @@ async function loadFiles(fileList){
       let wb;
       try{ wb = readWorkbook(sh.name, sh.buf); }catch{ koFiles++; continue; }
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, { defval:'' });
+      const aoa = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+      // Trouve la ligne d'en-tête (certains fichiers ont une bannière avant, ou aucun en-tête)
+      const hIdx = pickHeaderRow(aoa);
+      if(hIdx < 0){ skipped.push(sh.name); koFiles++; continue; }
+      const hs = (aoa[hIdx]||[]).map(c => (c==null?'':c).toString().trim());
+      const rows = aoa.slice(hIdx+1).map(arr => {
+        const o = {}; hs.forEach((h,ci) => { if(h) o[h] = (arr[ci]==null?'':arr[ci]); }); return o;
+      });
       if(!rows.length){ koFiles++; continue; }
-      const hs = Object.keys(rows[0]).filter(h => h && !/^__EMPTY/.test(h));
+      const hsClean = hs.filter((h,i) => h && hs.indexOf(h)===i);   // non vides, uniques
 
       // plan de mapping pour ce fichier
-      const plan = hs.map(h => ({ src:h, to:mapHeader(h) }));
-      const isEmpty = r => hs.every(h => (r[h]||'').toString().trim()==='');
+      const plan = hsClean.map(h => ({ src:h, to:mapHeader(h) }));
+      const isEmpty = r => hsClean.every(h => (r[h]||'').toString().trim()==='');
 
       let kept = 0;
       rows.forEach(r => {
@@ -490,10 +513,7 @@ async function loadFiles(fileList){
           const v = (r[src]==null ? '' : r[src]).toString().trim();
           if(to === '__NOTE'){ if(v && v !== '0') notes.push(`${src}: ${v}`); }
           else if(to){ if(v && !out[to]){ out[to] = r[src]; canonPresent.add(to); } }
-          else { // colonne inconnue : conservée telle quelle
-            out[src] = r[src];
-            if(!unknownSet.has(src)){ unknownSet.add(src); unknownOrder.push(src); }
-          }
+          else { if(v && v !== '0') notes.push(`${src}: ${v}`); }   // colonne inconnue -> versée dans Notes
         });
         if(notes.length){ out['Notes'] = notes.join(' | '); canonPresent.add('Notes'); }
         out['Fichier source'] = sh.name;
@@ -505,7 +525,6 @@ async function loadFiles(fileList){
 
     // ordre final des colonnes : canoniques (présentes) -> inconnues -> Fichier source
     const headerOrder = CANONICAL_ORDER.filter(h => canonPresent.has(h))
-                          .concat(unknownOrder)
                           .concat(['Fichier source']);
 
     // 3. État global
@@ -518,9 +537,11 @@ async function loadFiles(fileList){
     sheetName = multi ? `${okFiles} fichiers fusionnés` : sheets[0].name;
 
     setLoadStatus('');
+    if(skipped.length) window.__skippedFiles = skipped;
     renderWorkspace({
       name: multi ? `Fusion de ${okFiles} fichiers` : sheets[0].name,
-      detail: `${multi ? okFiles+' fichiers · ' : ''}${formatFr(fullRows.length)} lignes utiles × ${headers.length} colonnes${koFiles?` · ${koFiles} ignoré(s)`:''}`,
+      detail: `${multi ? okFiles+' fichiers · ' : ''}${formatFr(fullRows.length)} lignes utiles × ${headers.length} colonnes`
+        + (skipped.length ? ` · ⚠ ${skipped.length} sans en-tête ignoré(s) : ${skipped.join(', ')}` : ''),
       emptyCount,
     });
     showView('workspace');
