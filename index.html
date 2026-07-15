@@ -182,7 +182,7 @@ td.filled{background:var(--jade-soft)!important;color:var(--jade-deep);font-weig
     <span class="brand-sub">Préparation des imports</span>
   </div>
   <button class="nav-home" id="nav-home">← Accueil</button>
-  <span class="topbar-tag" id="topbar-tag">v3 · 07-07</span>
+  <span class="topbar-tag" id="topbar-tag">v5 · 07-07</span>
 </header>
 
 <input type="file" id="file-input" accept=".xlsx,.xls,.csv,.zip" multiple style="display:none">
@@ -603,7 +603,7 @@ function renderTable(table, columns, rows, showPct){
   const total = rows.length || 1;
   const pctOf = h => Math.round(rows.reduce((n,r) => n + ((r[h]==null?'':r[h]).toString().trim()!=='' ? 1 : 0), 0) / total * 100);
   const pctColor = p => p>=80 ? '#9BE6CC' : (p>=40 ? 'rgba(255,255,255,.55)' : '#F0B49E');
-  const isKnown = h => detectRole(h) || h==='E-mail principal' || h==='E-mails supplémentaires' || h==='Autres contacts' || h.indexOf("Nom de l'entreprise")===0 || h==='Source du contact';
+  const isKnown = h => detectRole(h) || h==='E-mail principal' || h==='E-mails supplémentaires' || h==='Notes' || h.indexOf("Nom de l'entreprise")===0 || h==='Source du contact';
   table.querySelector('thead').innerHTML =
     '<tr><th><span class="idx">#</span></th>' +
     columns.map((h,i) => {
@@ -927,6 +927,25 @@ function excelDate(v){
   const p=x=>String(x).padStart(2,'0');
   return `${p(d.getUTCDate())}/${p(d.getUTCMonth()+1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
 }
+// Normalise l'effectif vers les tranches HubSpot. On prend la tranche du plus petit
+// nombre présent : pour une plage à cheval (ex. « 300 à 600 »), c'est la tranche inférieure.
+function effectifBand(value){
+  let s = (value==null ? '' : value).toString();
+  if(!s.trim()) return '';
+  s = s.replace(/(\d)[\s\u00A0](\d)/g, '$1$2').replace(/(\d)[\s\u00A0](\d)/g, '$1$2'); // « 1 000 » -> « 1000 »
+  const nums = (s.match(/\d+/g) || []).map(Number);
+  if(!nums.length) return s.trim();   // aucune valeur chiffrée : on laisse tel quel
+  const n = Math.min(...nums);
+  if(n<=1)    return '0-1';
+  if(n<=10)   return '2-10';
+  if(n<=20)   return '11-20';
+  if(n<=50)   return '21-50';
+  if(n<=200)  return '51-200';
+  if(n<=500)  return '201-500';
+  if(n<=1000) return '501-1000';
+  if(n<=5000) return '1001-5000';
+  return '5000+';
+}
 // Sigles à garder en majuscules (entreprise + adresses)
 const COMPANY_ACRONYMS = new Set(['SARL','SAS','SASU','SA','EURL','SCI','SCM','SCP','SCOP','SNC','SCS','GIE','SE','EI','EIRL','EHPAD','CSE','CSEE','CSEC','CCAS','CHU','CHR','CH','RH','IME','ITEP','ESAT','MJC','CFA','BTP','TP','SDIS','GMBH','LLC','LTD','SIVU','SIVOM','CCI','CMA','MFR','APEI','ADMR','UDAF','ZA','ZI','ZAC','ZAE','BP','CS','CEDEX','RN','RD']);
 // Mots de liaison en minuscules (sauf en tout début)
@@ -1007,7 +1026,6 @@ function buildOutput(){
       else { plan[companyRep.get(cn)].companyContacts.push(src); plan[i].isFolded = true; }
     });
   }
-  const anyNote = plan.some(p => p.others.length || (p.companyContacts && p.companyContacts.length));
 
   // Bloc texte décrivant un contact non importé (pour « Autres contacts »)
   const get = (src, h) => (src[h]==null ? '' : src[h]).toString().trim();
@@ -1025,7 +1043,12 @@ function buildOutput(){
   // Les colonnes email brutes sont retirées : elles sont remplacées par
   // « E-mail principal » + « E-mails supplémentaires » (un email = une seule colonne).
   const nonEmptyHeader = h => fullRows.some(r => (r[h]||'').toString().trim() !== '');
-  const keptHeaders = headers.filter(h => !cols.emails.includes(h) && (h === cols.company || nonEmptyHeader(h)));
+  const keptHeaders = headers.filter(h => h !== 'Notes' && !cols.emails.includes(h) && (h === cols.company || nonEmptyHeader(h)));
+
+  // Une seule note importable : « Notes » regroupe commentaires/champs divers ET
+  // la liste des autres contacts, séparés par un titre interne.
+  const needNotes = fullRows.some(r => (r['Notes']||'').toString().trim() !== '')
+    || plan.some(p => p.others.length || (p.companyContacts && p.companyContacts.length));
 
   // Ordre des colonnes de sortie
   const outCols = [];
@@ -1035,7 +1058,7 @@ function buildOutput(){
     else outCols.push(h);
   });
   outCols.push('Code NAF', 'Libellé NAF');
-  if(anyNote) outCols.push('Autres contacts');
+  if(needNotes) outCols.push('Notes');
   outCols.push('Source du contact');
 
   const rows = fullRows.map((src, i) => {
@@ -1046,6 +1069,7 @@ function buildOutput(){
 
     // Nettoyage de base
     if(cols.siret) r[cols.siret] = siretDigits(r[cols.siret]) || '';
+    if(cols.effectif && (r[cols.effectif]||'').toString().trim()) r[cols.effectif] = effectifBand(r[cols.effectif]);
     cols.phones.forEach(c => { if(r[c]) r[c] = formatPhone(r[c]); });
     cols.dates.forEach(c => { if(r[c]!=='' && r[c]!=null && !isNaN(Number(r[c]))) r[c] = excelDate(r[c]); });
 
@@ -1061,6 +1085,12 @@ function buildOutput(){
     const noteSrc = plan[i].companyContacts || plan[i].others;   // entreprise sans email -> tous ; sinon -> les doublons
     const autresContacts = (noteSrc && noteSrc.length)
       ? noteSrc.map((o, k) => contactBlock(o, k+1)).join('\n\n') : '';
+    // Note unique : commentaires/champs divers + autres contacts, séparés par un titre
+    const notesPart = (r['Notes']||'').toString().trim();
+    let noteValue;
+    if(notesPart && autresContacts) noteValue = `Notes :\n${notesPart}\n\nAutres contacts :\n${autresContacts}`;
+    else if(autresContacts) noteValue = `Autres contacts :\n${autresContacts}`;
+    else noteValue = notesPart;
 
     // Objet de sortie dans l'ordre voulu
     const out = {};
@@ -1068,7 +1098,7 @@ function buildOutput(){
     outCols.forEach(c => {
       if(c === 'E-mail principal') out[c] = emailPrincipal;
       else if(c === 'E-mails supplémentaires') out[c] = emailSupp;
-      else if(c === 'Autres contacts'){ out[c] = autresContacts; if(autresContacts) out.__filled[c] = true; }
+      else if(c === 'Notes'){ out[c] = noteValue; if(autresContacts) out.__filled[c] = true; }
       else if(c === COMPANY_COL_1 || c === COMPANY_COL_2) out[c] = companyName;
       else if(c === 'Code NAF'){ out[c] = src.__nafCode || ''; if(src.__nafCode) out.__filled[c] = true; }
       else if(c === 'Libellé NAF'){ out[c] = src.__nafLabel || ''; if(src.__nafLabel) out.__filled[c] = true; }
