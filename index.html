@@ -182,7 +182,7 @@ td.filled{background:var(--jade-soft)!important;color:var(--jade-deep);font-weig
     <span class="brand-sub">Préparation des imports</span>
   </div>
   <button class="nav-home" id="nav-home">← Accueil</button>
-  <span class="topbar-tag" id="topbar-tag">v5 · 07-07</span>
+  <span class="topbar-tag" id="topbar-tag">v6 · 07-15</span>
 </header>
 
 <input type="file" id="file-input" accept=".xlsx,.xls,.csv,.zip" multiple style="display:none">
@@ -530,6 +530,15 @@ async function loadFiles(fileList){
     // 3. État global
     headers = headerOrder;
     cols = resolveCols(headers);
+    // Si on a une colonne entreprise, on garantit l'existence des colonnes enrichissables
+    // (même si le fichier source ne les contient pas) pour que l'enrichissement puisse les remplir.
+    if(cols.company){
+      ['SIRET entreprise','Code postal entreprise','Ville entreprise','Adresse entreprise','Effectif entreprise']
+        .forEach(h => { if(!headers.includes(h)) headers.push(h); });
+      const extras = headers.filter(h => !CANONICAL_ORDER.includes(h));
+      headers = CANONICAL_ORDER.filter(h => headers.includes(h)).concat(extras);
+      cols = resolveCols(headers);
+    }
     fullRows = merged;                              // déjà sans lignes vides
     originalRows = fullRows.map(r => ({ ...r }));
     const multi = sheets.length > 1;
@@ -603,7 +612,7 @@ function renderTable(table, columns, rows, showPct){
   const total = rows.length || 1;
   const pctOf = h => Math.round(rows.reduce((n,r) => n + ((r[h]==null?'':r[h]).toString().trim()!=='' ? 1 : 0), 0) / total * 100);
   const pctColor = p => p>=80 ? '#9BE6CC' : (p>=40 ? 'rgba(255,255,255,.55)' : '#F0B49E');
-  const isKnown = h => detectRole(h) || h==='E-mail principal' || h==='E-mails supplémentaires' || h==='Notes' || h.indexOf("Nom de l'entreprise")===0 || h==='Source du contact';
+  const isKnown = h => detectRole(h) || h==='E-mail principal' || h==='E-mails supplémentaires' || h==='Notes' || h.indexOf("Nom de l'entreprise")===0 || h==='Code NAF' || h==='Libellé NAF';
   table.querySelector('thead').innerHTML =
     '<tr><th><span class="idx">#</span></th>' +
     columns.map((h,i) => {
@@ -971,7 +980,7 @@ function properCase(str, opts){
 //  CONSTRUCTION DU FICHIER DE SORTIE
 //  - casse « nom propre » (prénom, nom, entreprise)
 //  - nettoyage (SIRET, téléphones +33, dates)
-//  - colonnes ajoutées : Phase du cycle de vie = Lead, Source du contact = Salon
+//  - colonnes enrichies : SIRET, CP, ville, adresse, effectif, NAF (si entreprise connue)
 //  - entreprise dupliquée en deux colonnes
 //  - email unique : vidé si déjà utilisé par un autre contact
 // ============================================================
@@ -1050,16 +1059,21 @@ function buildOutput(){
   const needNotes = fullRows.some(r => (r['Notes']||'').toString().trim() !== '')
     || plan.some(p => p.others.length || (p.companyContacts && p.companyContacts.length));
 
+  // Colonnes créées seulement si elles contiennent des données (pas de colonne vide)
+  const anyPrincipal = plan.some(p => p.principal);
+  const anySupp = plan.some(p => p.supp);
+  const anyNaf = fullRows.some(r => r.__nafCode || r.__nafLabel);
+
   // Ordre des colonnes de sortie
   const outCols = [];
-  if(emailsPresent) outCols.push('E-mail principal', 'E-mails supplémentaires');
+  if(anyPrincipal) outCols.push('E-mail principal');
+  if(anySupp) outCols.push('E-mails supplémentaires');
   keptHeaders.forEach(h => {
     if(cols.company && h === cols.company){ outCols.push(COMPANY_COL_1, COMPANY_COL_2); }
     else outCols.push(h);
   });
-  outCols.push('Code NAF', 'Libellé NAF');
+  if(anyNaf) outCols.push('Code NAF', 'Libellé NAF');
   if(needNotes) outCols.push('Notes');
-  outCols.push('Source du contact');
 
   const rows = fullRows.map((src, i) => {
     if(plan[i].isDup || plan[i].isFolded) return null;   // contact replié dans une note
@@ -1102,7 +1116,6 @@ function buildOutput(){
       else if(c === COMPANY_COL_1 || c === COMPANY_COL_2) out[c] = companyName;
       else if(c === 'Code NAF'){ out[c] = src.__nafCode || ''; if(src.__nafCode) out.__filled[c] = true; }
       else if(c === 'Libellé NAF'){ out[c] = src.__nafLabel || ''; if(src.__nafLabel) out.__filled[c] = true; }
-      else if(c === 'Source du contact') out[c] = 'Salon';
       else { out[c] = r[c] ?? ''; if(src.__filled && src.__filled[c]) out.__filled[c] = true; }
     });
     return out;
