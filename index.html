@@ -182,7 +182,7 @@ td.filled{background:var(--jade-soft)!important;color:var(--jade-deep);font-weig
     <span class="brand-sub">Préparation des imports</span>
   </div>
   <button class="nav-home" id="nav-home">← Accueil</button>
-  <span class="topbar-tag" id="topbar-tag">v6 · 07-15</span>
+  <span class="topbar-tag" id="topbar-tag">v7 · 07-15</span>
 </header>
 
 <input type="file" id="file-input" accept=".xlsx,.xls,.csv,.zip" multiple style="display:none">
@@ -723,7 +723,7 @@ const Sirene = {
   normalize: s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\b(la|le|les|de|du|des|et|sa|sas|sarl|eurl|asso|association|ste|societe)\b/g,'').replace(/\s+/g,' ').trim(),
   jaccard(a,b){const bg=s=>{const set=new Set();for(let i=0;i<s.length-1;i++)set.add(s.slice(i,i+2));return set;};const ba=bg(a),bb=bg(b);const inter=[...ba].filter(x=>bb.has(x)).length;const uni=new Set([...ba,...bb]).size;return uni?inter/uni:0;},
 
-  async callApi(q, cp, dept){
+  async callApi(q, cp, dept, pickSiret){
     const params = new URLSearchParams({ q:q.substring(0,100), per_page:'20' });
     if(cp) params.set('code_postal', cp);
     else if(dept) params.set('departement', dept);
@@ -734,11 +734,18 @@ const Sirene = {
     const json = await res.json();
     return (json.results||[]).map(r => {
       const siege = r.siege || {};
-      // Si on a filtré (CP ou département), on privilégie l'établissement correspondant
-      // (l'agence locale), pas le siège souvent ailleurs.
+      // On choisit l'établissement dont on veut les infos (SIRET, adresse…) :
+      // - si on cible un SIRET précis, on prend CET établissement (adresse cohérente avec le SIRET) ;
+      // - sinon, si on a filtré par CP/département, on prend l'agence locale correspondante ;
+      // - à défaut, le siège.
       let pick = siege, usedEtab = false;
-      if((cp || dept) && Array.isArray(r.matching_etablissements)){
-        const e = r.matching_etablissements.find(x => /^\d{14}$/.test(((x&&x.siret)||'').toString()));
+      const etabs = Array.isArray(r.matching_etablissements) ? r.matching_etablissements : [];
+      if(pickSiret){
+        let e = etabs.find(x => ((x&&x.siret)||'').toString() === pickSiret);
+        if(!e && (siege.siret||'').toString() === pickSiret) e = siege;
+        if(e){ pick = e; usedEtab = true; }
+      } else if(cp || dept){
+        const e = etabs.find(x => /^\d{14}$/.test(((x&&x.siret)||'').toString()));
         if(e){ pick = e; usedEtab = true; }
       }
       // SIRET = 14 chiffres (≠ SIREN à 9). On ne retient qu'un SIRET valide.
@@ -801,7 +808,7 @@ const Sirene = {
   async searchBySiret(siret){
     if(!/^\d{14}$/.test(siret||'')) return null;
     let cands;
-    try{ cands = await Sirene.callApi(siret, ''); }catch{ return null; }
+    try{ cands = await Sirene.callApi(siret, '', undefined, siret); }catch{ return null; }
     if(!cands.length) return null;
     const sir9 = siret.slice(0,9);
     const best = cands.find(c => c.siren === sir9) || cands[0];
