@@ -199,7 +199,7 @@ td.filled{background:var(--jade-soft)!important;color:var(--jade-deep);font-weig
     <span class="brand-sub">Préparation des imports</span>
   </div>
   <button class="nav-home" id="nav-home">← Accueil</button>
-  <span class="topbar-tag" id="topbar-tag">v8 · 08-17</span>
+  <span class="topbar-tag" id="topbar-tag">v9 · 08-17</span>
 </header>
 
 <input type="file" id="file-input" accept=".xlsx,.xls,.csv,.zip" multiple style="display:none">
@@ -881,6 +881,19 @@ const Sirene = {
       (r.matching_etablissements||[]).forEach(e => (e.liste_enseignes||[]).forEach(x => x && enseignes.push(x)));
       (siege.liste_enseignes||[]).forEach(x => x && enseignes.push(x));
       const names = [r.nom_complet, r.nom_raison_sociale, r.sigle].concat(enseignes).filter(Boolean);
+      // Adresse « rue » uniquement (numéro + voie), sans code postal ni ville.
+      // On privilégie les champs bruts de l'API (numero_voie/type_voie/libelle_voie) ;
+      // à défaut on retire le CP + la ville de la fin de l'adresse complète fournie.
+      const streetOnly = e => {
+        if(!e) return '';
+        const parts = [e.numero_voie, e.indice_repetition, e.type_voie, e.libelle_voie].filter(Boolean);
+        if(parts.length) return parts.join(' ').replace(/\s+/g,' ').trim();
+        let a = (e.adresse || '').toString().trim();
+        if(!a) return '';
+        if(e.code_postal) a = a.replace(new RegExp('[,\\s]*'+e.code_postal+'\\b.*$'), '').trim();
+        if(e.libelle_commune) a = a.replace(new RegExp('[,\\s]*'+e.libelle_commune+'\\s*$', 'i'), '').trim();
+        return a;
+      };
       return {
         siret,
         siren: r.siren || '',
@@ -888,7 +901,7 @@ const Sirene = {
         names,
         cpFound: pick.code_postal || (usedEtab ? cp : '') || siege.code_postal || '',
         villeFound: pick.libelle_commune || siege.libelle_commune || '',
-        adresseFound: pick.adresse || siege.adresse || siege.libelle_voie || '',
+        adresseFound: streetOnly(pick) || streetOnly(siege),
         effectif: Sirene.EFFECTIF[r.tranche_effectif_salarie] || '',
         naf: pick.activite_principale || siege.activite_principale || r.activite_principale || '',
       };
