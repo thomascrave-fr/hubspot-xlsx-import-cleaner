@@ -199,7 +199,7 @@ td.filled{background:var(--jade-soft)!important;color:var(--jade-deep);font-weig
     <span class="brand-sub">Préparation des imports</span>
   </div>
   <button class="nav-home" id="nav-home">← Accueil</button>
-  <span class="topbar-tag" id="topbar-tag">v12 · 08-18</span>
+  <span class="topbar-tag" id="topbar-tag">v13 · 08-18</span>
 </header>
 
 <input type="file" id="file-input" accept=".csv,.zip" multiple style="display:none">
@@ -207,13 +207,14 @@ td.filled{background:var(--jade-soft)!important;color:var(--jade-deep);font-weig
 <!-- ====================== MODALE : INFOS DE L'IMPORT ====================== -->
 <div class="modal-overlay" id="import-modal">
   <div class="modal-card">
-    <div class="modal-title">Informations de l'import</div>
+    <div class="modal-title" id="imp-title">Informations de l'import</div>
+    <div class="modal-sub" id="imp-progress" style="display:none"></div>
     <div class="modal-sub">Ces informations seront ajoutées comme colonnes dans le fichier.</div>
     <form id="import-form">
       <div class="field">
         <label for="imp-name">Nom de l'import</label>
         <input type="text" id="imp-name" required>
-        <div class="field-hint">Sert aussi de nom pour le fichier exporté.</div>
+        <div class="field-hint">Sert de nom pour le fichier exporté (ou de repère pour ce fichier si plusieurs sont importés).</div>
       </div>
       <div class="field">
         <label for="imp-marque">Marque</label>
@@ -347,11 +348,20 @@ fillSelect('imp-marque', MARQUES);
 fillSelect('imp-source', SOURCES);
 fillSelect('imp-salon', SALONS);
 
-// Ouvre la modale et résout avec { marque, source, salon, importName } ou null si annulé
-function openImportForm(defaultName){
+// Ouvre la modale et résout avec { marque, source, salon, importName } ou null si annulé.
+// progress optionnel : {current, total, fileLabel} pour afficher "Fichier X/N : nom.csv"
+// lors d'un import de plusieurs fichiers (le formulaire est demandé pour chacun).
+function openImportForm(defaultName, progress){
   return new Promise(resolve => {
     const overlay = el('import-modal');
     const form = el('import-form');
+    const progEl = el('imp-progress');
+    if(progress){
+      progEl.textContent = `Fichier ${progress.current}/${progress.total} : ${progress.fileLabel}`;
+      progEl.style.display = '';
+    } else {
+      progEl.style.display = 'none';
+    }
     el('imp-marque').value = '';
     el('imp-source').value = '';
     el('imp-salon').value = '';
@@ -469,7 +479,6 @@ function mapHeader(h){
 // ============================================================
 let fullRows = [], originalRows = [], headers = [], cols = {}, currentFilename = '', sheetName = '';
 let stopFlag = false;
-let importMeta = null;   // { marque, source, salon, importName } — rempli via la modale d'import
 
 el('brand').addEventListener('click', goHome);
 el('nav-home').addEventListener('click', goHome);
@@ -609,7 +618,9 @@ async function loadFiles(fileList){
     const canonPresent = new Set();      // champs canoniques réellement rencontrés
     const merged = [];
     const skipped = [];                  // fichiers sans en-tête exploitable
+    const cancelled = [];                // fichiers dont le formulaire a été annulé
     let emptyCount = 0, okFiles = 0, koFiles = 0;
+    let lastMeta = null;                 // pour retrouver le nom si un seul fichier au final
 
     for(let s=0; s<sheets.length; s++){
       const sh = sheets[s];
@@ -629,6 +640,16 @@ async function loadFiles(fileList){
       if(!rows.length){ koFiles++; continue; }
       const hsClean = hs.filter((h,i) => h && hs.indexOf(h)===i);   // non vides, uniques
 
+      // Formulaire d'import POUR CE FICHIER : marque / nom de l'import / source (+ salon si Salon)
+      setLoadStatus('');
+      const meta = await openImportForm(
+        sh.name.replace(SHEET_RE,''),
+        sheets.length > 1 ? { current: s+1, total: sheets.length, fileLabel: sh.name } : null
+      );
+      if(!meta){ cancelled.push(sh.name); koFiles++; continue; }   // annulé -> ce fichier est ignoré
+      lastMeta = meta;
+      setLoadStatus(`Lecture ${s+1}/${sheets.length} : ${sh.name}`);
+
       // plan de mapping pour ce fichier
       const plan = hsClean.map(h => ({ src:h, to:mapHeader(h) }));
       const isEmpty = r => hsClean.every(h => (r[h]||'').toString().trim()==='');
@@ -646,11 +667,17 @@ async function loadFiles(fileList){
         });
         if(notes.length){ out['Notes'] = notes.join(' | '); canonPresent.add('Notes'); }
         out['Fichier source'] = sh.name;
+        out.__importMeta = meta;   // marque/source/salon propres à ce fichier
         merged.push(out); kept++;
       });
       if(kept) okFiles++; else koFiles++;
     }
-    if(!merged.length){ setLoadStatus(''); showError("Les fichiers semblent vides ou illisibles."); return; }
+    if(!merged.length){
+      setLoadStatus('');
+      // Si l'utilisateur a annulé le formulaire pour tous les fichiers, retour silencieux à l'accueil.
+      if(cancelled.length < sheets.length) showError("Les fichiers semblent vides ou illisibles.");
+      return;
+    }
 
     // ordre final des colonnes : canoniques (présentes) -> inconnues -> Fichier source
     const headerOrder = CANONICAL_ORDER.filter(h => canonPresent.has(h))
@@ -671,22 +698,18 @@ async function loadFiles(fileList){
     fullRows = merged;                              // déjà sans lignes vides
     originalRows = fullRows.map(r => ({ ...r }));
     const multi = sheets.length > 1;
-    currentFilename = multi ? `fusion_${okFiles}_fichiers` : sheets[0].name.replace(SHEET_RE,'');
+    currentFilename = multi ? `fusion_${okFiles}_fichiers` : (lastMeta ? lastMeta.importName : sheets[0].name.replace(SHEET_RE,''));
     sheetName = multi ? `${okFiles} fichiers fusionnés` : sheets[0].name;
 
     setLoadStatus('');
 
-    // Formulaire : marque / nom de l'import / source (+ salon si source = Salon)
-    const meta = await openImportForm(currentFilename);
-    if(!meta){ return; }   // import annulé, on reste sur l'accueil
-    importMeta = meta;
-    currentFilename = meta.importName || currentFilename;
-
     if(skipped.length) window.__skippedFiles = skipped;
+    if(cancelled.length) window.__cancelledFiles = cancelled;
     renderWorkspace({
       name: multi ? `Fusion de ${okFiles} fichiers` : sheets[0].name,
       detail: `${multi ? okFiles+' fichiers · ' : ''}${formatFr(fullRows.length)} lignes utiles × ${headers.length} colonnes`
         + (skipped.length ? ` · ⚠ ${skipped.length} sans en-tête ignoré(s) : ${skipped.join(', ')}` : '')
+        + (cancelled.length ? ` · ⚠ ${cancelled.length} fichier(s) ignoré(s) (formulaire annulé) : ${cancelled.join(', ')}` : '')
         + (rejected.length ? ` · ⚠ ${rejected.length} fichier(s) .xlsx/.xls ignoré(s) (CSV requis) : ${rejected.join(', ')}` : ''),
       emptyCount,
     });
@@ -1261,10 +1284,12 @@ function buildOutput(){
   const anyNaf = fullRows.some(r => r.__nafCode || r.__nafLabel);
 
   // Ordre des colonnes de sortie
+  const anyImportMeta = fullRows.some(r => r.__importMeta);
+  const anySalonSource = fullRows.some(r => r.__importMeta && r.__importMeta.source === 'Salon');
   const outCols = [];
-  if(importMeta){
+  if(anyImportMeta){
     outCols.push('Marque', 'Source du contact');
-    if(importMeta.source === 'Salon') outCols.push('Salon');
+    if(anySalonSource) outCols.push('Salon');
   }
   if(anyPrincipal) outCols.push('E-mail principal');
   if(anySupp) outCols.push('E-mails supplémentaires');
@@ -1308,12 +1333,13 @@ function buildOutput(){
     else noteValue = notesPart;
 
     // Objet de sortie dans l'ordre voulu
+    const rowMeta = src.__importMeta || null;   // marque/source/salon du FICHIER dont provient cette ligne
     const out = {};
     out.__filled = {};
     outCols.forEach(c => {
-      if(c === 'Marque') out[c] = importMeta.marque;
-      else if(c === 'Source du contact') out[c] = importMeta.source;
-      else if(c === 'Salon') out[c] = importMeta.salon;
+      if(c === 'Marque') out[c] = rowMeta ? rowMeta.marque : '';
+      else if(c === 'Source du contact') out[c] = rowMeta ? rowMeta.source : '';
+      else if(c === 'Salon') out[c] = (rowMeta && rowMeta.source === 'Salon') ? rowMeta.salon : '';
       else if(c === 'E-mail principal') out[c] = emailPrincipal;
       else if(c === 'E-mails supplémentaires') out[c] = emailSupp;
       else if(c === 'Notes'){ out[c] = noteValue; if(autresContacts) out.__filled[c] = true; }
