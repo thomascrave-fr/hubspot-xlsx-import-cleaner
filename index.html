@@ -189,6 +189,20 @@ td.filled{background:var(--jade-soft)!important;color:var(--jade-deep);font-weig
 .btn-modal-cancel:hover{border-color:var(--faint);color:var(--ink)}
 .btn-modal-submit{font-size:13px;font-weight:600;color:#fff;background:var(--jade);border:none;border-radius:9px;padding:10px 18px;cursor:pointer}
 .btn-modal-submit:hover{background:var(--jade-deep)}
+
+/* Carte « Lignes suspectes » cliquable + modale de détail */
+.stat.clickable{cursor:pointer;transition:border-color .15s,transform .1s}
+.stat.clickable:hover{border-color:var(--amber)}
+.stat.clickable:active{transform:scale(.98)}
+.stat-foot.link{color:var(--jade-deep);text-decoration:underline;cursor:pointer}
+.modal-card.wide{max-width:640px}
+.anomaly-list{max-height:50vh;overflow-y:auto;border:1px solid var(--line);border-radius:10px;margin-top:4px}
+.anomaly-item{padding:10px 14px;border-bottom:1px solid var(--line);font-size:13px}
+.anomaly-item:last-child{border-bottom:none}
+.anomaly-item .a-where{font-weight:600;color:var(--ink)}
+.anomaly-item .a-reason{color:var(--muted);margin-top:2px}
+.anomaly-item .a-value{font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--paper);border-radius:5px;padding:1px 6px;color:var(--ink-soft)}
+.anomaly-more{padding:10px 14px;font-size:12px;color:var(--faint);text-align:center}
 </style>
 </head>
 <body>
@@ -199,7 +213,7 @@ td.filled{background:var(--jade-soft)!important;color:var(--jade-deep);font-weig
     <span class="brand-sub">Préparation des imports</span>
   </div>
   <button class="nav-home" id="nav-home">← Accueil</button>
-  <span class="topbar-tag" id="topbar-tag">v13 · 08-18</span>
+  <span class="topbar-tag" id="topbar-tag">v17 · 08-18</span>
 </header>
 
 <input type="file" id="file-input" accept=".csv,.zip" multiple style="display:none">
@@ -239,6 +253,18 @@ td.filled{background:var(--jade-soft)!important;color:var(--jade-deep);font-weig
         <button type="submit" class="btn-modal-submit">Valider</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- ====================== MODALE : DÉTAIL DES ANOMALIES ====================== -->
+<div class="modal-overlay" id="anomaly-modal">
+  <div class="modal-card wide">
+    <div class="modal-title">Lignes suspectes</div>
+    <div class="modal-sub" id="anomaly-sub">Des données ne correspondent pas à ce qu'on attend dans leur colonne.</div>
+    <div class="anomaly-list" id="anomaly-list"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn-modal-submit" id="anomaly-close">Fermer</button>
+    </div>
   </div>
 </div>
 
@@ -479,6 +505,7 @@ function mapHeader(h){
 // ============================================================
 let fullRows = [], originalRows = [], headers = [], cols = {}, currentFilename = '', sheetName = '';
 let stopFlag = false;
+let currentAnomalies = [];   // anomalies détectées dans le fichier chargé (colonne / valeur / raison)
 
 el('brand').addEventListener('click', goHome);
 el('nav-home').addEventListener('click', goHome);
@@ -720,6 +747,99 @@ async function loadFiles(fileList){
   }
 }
 
+// ============================================================
+//  DÉTECTION D'ANOMALIES : le contenu d'une colonne ne ressemble
+//  pas à ce que son nom promet (ex : une fonction dans "Nom",
+//  une adresse dans "Ville", un e-mail invalide...).
+// ============================================================
+const FUNCTION_WORDS = new Set(['DIRECTEUR','DIRECTRICE','PRESIDENT','PRESIDENTE','SECRETAIRE',
+  'TRESORIER','TRESORIERE','RESPONSABLE','MANAGER','CHARGE','CHARGEE','ELU','ELUE','ADJOINT','ADJOINTE',
+  'GERANT','GERANTE','ASSISTANT','ASSISTANTE','CONSULTANT','CONSULTANTE','COORDINATEUR','COORDINATRICE',
+  'ANIMATEUR','ANIMATRICE','DELEGUE','DELEGUEE','MEMBRE','SUPPLEANT','SUPPLEANTE','TITULAIRE',
+  'REFERENT','REFERENTE','FONDATEUR','FONDATRICE','ASSOCIE','ASSOCIEE']);
+const ADDRESS_WORDS_RE = /\b(rue|avenue|boulevard|chemin|allee|impasse|route|place|cours|quai|lieu ?dit|lotissement|residence|za|zac|zi)\b/;
+// Salons/événements connus (voir la liste SALONS) : sert à repérer une valeur du type
+// « Lyon 2026 S1 Scse » glissée par erreur dans une colonne Nom/Prénom.
+const SALON_NORM_SET = new Set(SALONS.map(s => norm(s)));
+const EVENT_YEAR_RE = /\b20\d{2}\b/;
+const EVENT_ORG_RE = /\b(scse|eluceo|cgr|iconic|summit)\b/;
+const EVENT_SESSION_RE = /\bs[12]\b/;
+
+function looksLikeEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test((v||'').toString().trim()); }
+function digitCount(v){ return ((v||'').toString().match(/\d/g)||[]).length; }
+
+// Vérifie une valeur pour un type de champ donné ; renvoie un message d'anomalie, ou null si RAS.
+function checkField(kind, raw){
+  const v = (raw==null ? '' : raw).toString().trim();
+  if(!v) return null;   // vide : pas une anomalie de contenu (déjà couvert par la complétude)
+  const n = norm(v);
+
+  if(kind === 'nom' || kind === 'prenom'){
+    if(looksLikeEmail(v)) return 'ressemble à un e-mail, pas à un nom';
+    if(SALON_NORM_SET.has(n) || (EVENT_YEAR_RE.test(n) && (EVENT_ORG_RE.test(n) || EVENT_SESSION_RE.test(n))))
+      return 'ressemble à un nom de salon/événement, pas à un nom';
+    if(digitCount(v) >= 2) return 'contient des chiffres';
+    if(ADDRESS_WORDS_RE.test(n)) return 'ressemble à une adresse';
+    const tokens = n.split(/[^a-z]+/).filter(Boolean).map(t => t.toUpperCase());
+    if(tokens.some(t => FUNCTION_WORDS.has(t) || FONCTION_ACRONYMS.has(t))) return 'ressemble à une fonction, pas à un nom';
+    if(v.replace(/[^a-zA-Zà-ÿÀ-Ÿ\-\' ]/g,'').trim().length < 2) return 'trop court pour être un nom';
+    if(/^(.)\1+$/.test(v.replace(/\s/g,''))) return 'valeur suspecte (caractère répété)';
+    return null;
+  }
+  if(kind === 'email') return looksLikeEmail(v) ? null : "ne ressemble pas à un e-mail valide";
+  if(kind === 'telephone'){
+    // À ce stade (après nettoyage) un numéro valide est déjà en E.164 (+33...).
+    return /^\+\d{8,15}$/.test(v) ? null : 'format de téléphone non reconnu (attendu +33...)';
+  }
+  if(kind === 'siret') return /^\d{14}$/.test(siretDigits(v)) ? null : 'ne fait pas 14 chiffres';
+  if(kind === 'codepostal') return /^\d{5}$/.test(v) ? null : 'ne fait pas 5 chiffres';
+  if(kind === 'ville') return (ADDRESS_WORDS_RE.test(n) || /\d/.test(v)) ? 'ressemble à une adresse, pas à une ville' : null;
+  return null;
+}
+
+// Vérifie les données APRÈS nettoyage/enrichissement (outCols/rows = résultat de buildOutput()).
+function computeAnomalies(outCols, rows){
+  const checks = [];
+  if(cols.lastname  && outCols.includes(cols.lastname))  checks.push({ field: cols.lastname,  kind:'nom' });
+  if(cols.firstname && outCols.includes(cols.firstname)) checks.push({ field: cols.firstname, kind:'prenom' });
+  if(outCols.includes('E-mail principal')) checks.push({ field:'E-mail principal', kind:'email' });
+  cols.phones.forEach(f => { if(outCols.includes(f)) checks.push({ field:f, kind:'telephone' }); });
+  if(cols.siret && outCols.includes(cols.siret)) checks.push({ field: cols.siret, kind:'siret' });
+  if(cols.cp    && outCols.includes(cols.cp))    checks.push({ field: cols.cp,    kind:'codepostal' });
+  if(cols.ville && outCols.includes(cols.ville)) checks.push({ field: cols.ville, kind:'ville' });
+
+  const out = [];
+  rows.forEach((r, i) => {
+    checks.forEach(({field, kind}) => {
+      const reason = checkField(kind, r[field]);
+      if(reason) out.push({ row:i, field, value:(r[field]||'').toString(), reason, file: r['Fichier source']||'' });
+    });
+    if(outCols.includes('E-mails supplémentaires') && r['E-mails supplémentaires']){
+      (r['E-mails supplémentaires']||'').toString().split(',').map(s => s.trim()).filter(Boolean).forEach(e => {
+        const reason = checkField('email', e);
+        if(reason) out.push({ row:i, field:'E-mails supplémentaires', value:e, reason, file: r['Fichier source']||'' });
+      });
+    }
+  });
+  return out;
+}
+
+function openAnomalyModal(){
+  const MAX = 300;
+  const rowsToShow = currentAnomalies.slice(0, MAX);
+  el('anomaly-list').innerHTML = rowsToShow.map(a => `
+    <div class="anomaly-item">
+      <div class="a-where">${escapeHtml(a.field)}${a.file ? ` · ${escapeHtml(a.file)}` : ''}</div>
+      <div class="a-value">${escapeHtml(a.value)}</div>
+      <div class="a-reason">${escapeHtml(a.reason)}</div>
+    </div>`).join('') + (currentAnomalies.length > MAX ? `<div class="anomaly-more">… et ${currentAnomalies.length - MAX} de plus</div>` : '');
+  const suspectRows = new Set(currentAnomalies.map(a => a.row)).size;
+  el('anomaly-sub').textContent = `${currentAnomalies.length} anomalie(s) détectée(s) sur ${suspectRows} ligne(s).`;
+  el('anomaly-modal').classList.add('show');
+}
+el('anomaly-close').addEventListener('click', () => el('anomaly-modal').classList.remove('show'));
+el('anomaly-modal').addEventListener('click', e => { if(e.target.id === 'anomaly-modal') el('anomaly-modal').classList.remove('show'); });
+
 function renderWorkspace(meta){
   const base = fullRows.length || 1;
   const val = (row, c) => (c||[]).map(x => (row[x]||'').toString().trim()).find(v=>v) || '';
@@ -734,6 +854,7 @@ function renderWorkspace(meta){
   el('fb-detail').textContent = meta.detail;
 
   const emptyCount = meta.emptyCount || 0;
+  currentAnomalies = [];   // recalculées après « Nettoyer et enrichir », pas avant
 
   const cards = [
     { label:'Lignes utiles',   value:fullRows.length, cls:'accent' },
@@ -843,25 +964,41 @@ function uniqueCompanyStats(){
 
 function renderEnrichResult(){
   const panel = el('result-panel');
-  if(!cols.company){ panel.innerHTML=''; return; }
-  const s = uniqueCompanyStats();
-  const card = (label, d) => `
-    <div class="stat accent">
-      <div class="stat-label">${label}</div>
-      <div class="stat-value" data-count="${d.enriched}">0</div>
-      <div class="stat-foot"><strong>${pct(d.after, s.total)}</strong> des entreprises en ont un · ${formatFr(d.after)}/${formatFr(s.total)}</div>
-    </div>`;
-  let cards = '';
-  if(cols.siret)    cards += card('SIRET enrichis', s.siret);
-  if(cols.cp)       cards += card('Codes postaux enrichis', s.cp);
-  if(cols.effectif) cards += card("Nombre d'employés enrichis", s.eff);
-  cards += card('Codes NAF renseignés', s.naf);
-  panel.innerHTML = `
-    <div class="section-label">Résultat de l'enrichissement
-      <span style="margin-left:auto;text-transform:none;letter-spacing:0;font-family:Inter;font-size:11px;color:var(--faint)">sur ${formatFr(s.total)} entreprises uniques</span>
-    </div>
-    <div class="grid">${cards}</div>`;
+  let html = '';
+  if(cols.company){
+    const s = uniqueCompanyStats();
+    const card = (label, d) => `
+      <div class="stat accent">
+        <div class="stat-label">${label}</div>
+        <div class="stat-value" data-count="${d.enriched}">0</div>
+        <div class="stat-foot"><strong>${pct(d.after, s.total)}</strong> des entreprises en ont un · ${formatFr(d.after)}/${formatFr(s.total)}</div>
+      </div>`;
+    let cards = '';
+    if(cols.siret)    cards += card('SIRET enrichis', s.siret);
+    if(cols.cp)       cards += card('Codes postaux enrichis', s.cp);
+    if(cols.effectif) cards += card("Nombre d'employés enrichis", s.eff);
+    cards += card('Codes NAF renseignés', s.naf);
+    html += `
+      <div class="section-label">Résultat de l'enrichissement
+        <span style="margin-left:auto;text-transform:none;letter-spacing:0;font-family:Inter;font-size:11px;color:var(--faint)">sur ${formatFr(s.total)} entreprises uniques</span>
+      </div>
+      <div class="grid">${cards}</div>`;
+  }
+  if(currentAnomalies.length){
+    const suspectRows = new Set(currentAnomalies.map(a => a.row)).size;
+    html += `
+      <div class="section-label" style="margin-top:${cols.company?'16px':'0'}">Contrôle qualité (après nettoyage)</div>
+      <div class="grid">
+        <div class="stat warn clickable" id="stat-anomalies" style="grid-column:span 2">
+          <div class="stat-label">Lignes suspectes</div>
+          <div class="stat-value" data-count="${suspectRows}">0</div>
+          <div class="stat-foot">${currentAnomalies.length} anomalie(s) détectée(s) · cliquer pour le détail</div>
+        </div>
+      </div>`;
+  }
+  panel.innerHTML = html;
   animateCounts(panel);
+  if(currentAnomalies.length){ const card = el('stat-anomalies'); if(card) card.addEventListener('click', openAnomalyModal); }
 }
 
 // ============================================================
@@ -1090,6 +1227,12 @@ async function runProcess(){
   // Nettoyage + aperçu du résultat
   addLog('Nettoyage appliqué (casse, téléphones, dates, colonnes, doublons d\'email).', 'ok');
   el('enrich-progress').style.width = '100%';
+  const built = buildOutput();
+  currentAnomalies = computeAnomalies(built.outCols, built.rows);
+  if(currentAnomalies.length){
+    const suspectRows = new Set(currentAnomalies.map(a => a.row)).size;
+    addLog(`⚠ ${currentAnomalies.length} anomalie(s) détectée(s) sur ${suspectRows} ligne(s) après nettoyage.`, 'warn');
+  }
   renderEnrichResult();
   el('tab-clean').disabled = false;
   switchTab('clean');
@@ -1323,8 +1466,20 @@ function buildOutput(){
     const emailPrincipal = plan[i].principal;
     const emailSupp = plan[i].supp;
     const noteSrc = plan[i].companyContacts || plan[i].others;   // entreprise sans email -> tous ; sinon -> les doublons
-    const autresContacts = (noteSrc && noteSrc.length)
+    let autresContacts = (noteSrc && noteSrc.length)
       ? noteSrc.map((o, k) => contactBlock(o, k+1)).join('\n\n') : '';
+    // Ligne sans e-mail, pas déjà couverte ci-dessus (cas où d'autres contacts de la même
+    // entreprise ONT un e-mail) : aucune info de contact en colonne, tout part en Notes.
+    if(!emailPrincipal && !plan[i].companyContacts && !autresContacts){
+      autresContacts = contactBlock(src, 1);
+    }
+    // Sans e-mail, aucune colonne représentant LE CONTACT (par opposition à l'entreprise)
+    // n'est renseignée : l'identité va uniquement en Notes. Champs entreprise (adresse,
+    // SIRET, téléphone entreprise/CSE, commercial…) restent inchangés.
+    const CONTACT_FIELDS = ['Civilité', 'Prénom', 'Nom', 'Fonction', 'Téléphone portable prospect'];
+    if(!emailPrincipal){
+      CONTACT_FIELDS.forEach(f => { if(f in r) r[f] = ''; });
+    }
     // Note unique : commentaires/champs divers + autres contacts, séparés par un titre
     const notesPart = (r['Notes']||'').toString().trim();
     let noteValue;
