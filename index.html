@@ -199,7 +199,7 @@ td.filled{background:var(--jade-soft)!important;color:var(--jade-deep);font-weig
     <span class="brand-sub">Préparation des imports</span>
   </div>
   <button class="nav-home" id="nav-home">← Accueil</button>
-  <span class="topbar-tag" id="topbar-tag">v10 · 08-18</span>
+  <span class="topbar-tag" id="topbar-tag">v12 · 08-18</span>
 </header>
 
 <input type="file" id="file-input" accept=".csv,.zip" multiple style="display:none">
@@ -1078,14 +1078,53 @@ async function runProcess(){
 // ============================================================
 //  NETTOYAGE + EXPORT + HISTORIQUE
 // ============================================================
+// Conversion au format international E.164 (+33XXXXXXXXX, sans espaces ni séparateurs).
+// Gère les écritures courantes : « 06 12 34 56 78 », « +33 (0)6 12 34 56 78 »,
+// « 0033612345678 », « 33612345678 »… Les numéros non reconnus sont laissés tels quels.
 function formatPhone(val){
-  if(val==null||val==='') return val;
-  let s=String(val).replace(/[\s.\-()]/g,'');
-  if(s.startsWith('+33')) return String(val).trim();
-  if(s.startsWith('0033')) return '+33'+s.slice(4);
-  if(s.startsWith('33')&&s.length>=11) return '+'+s;
-  if(s.startsWith('0')&&s.length===10) return '+33'+s.slice(1);
-  return String(val).trim();
+  if(val==null || val==='') return val;
+  const raw = String(val).trim();
+  if(!raw) return raw;
+  let s = raw.replace(/\(0\)/g, '');     // « +33 (0)6 12 34 56 78 » -> le "(0)" est retiré
+  s = s.replace(/[\s.\-()]/g, '');       // séparateurs restants (espaces, points, tirets, parenthèses)
+  if(s.startsWith('00')) s = '+' + s.slice(2);   // « 0033… » -> « +33… »
+
+  if(s.startsWith('+33')){
+    let rest = s.slice(3).replace(/\D/g,'');
+    if(rest.startsWith('0')) rest = rest.slice(1);   // « +330612345678 » -> « +33612345678 »
+    return rest ? '+33'+rest : raw;
+  }
+  if(s.startsWith('33') && s.length>=11){
+    let rest = s.slice(2).replace(/\D/g,'');
+    if(rest.startsWith('0')) rest = rest.slice(1);
+    return rest ? '+33'+rest : raw;
+  }
+  if(/^0\d{9}$/.test(s)) return '+33'+s.slice(1);
+  if(s.startsWith('+')){
+    // autre indicatif international (hors France) : on nettoie les séparateurs sans forcer +33
+    const digits = s.slice(1).replace(/\D/g,'');
+    return digits ? '+'+digits : raw;
+  }
+  return raw;   // format non reconnu (numéro incomplet, texte…) : on laisse tel quel
+}
+// Sigles courants de fonctions/instances RH — conservés en majuscules dans sentenceCase.
+const FONCTION_ACRONYMS = new Set(['CSE','CSEE','CSEC','CE','DP','CHSCT','CSSCT','IRP','DUP',
+  'RH','DRH','RRH','DAF','DG','DGA','PDG','DGS','SG','DSI','RSSI',
+  'CEO','CFO','COO','CTO','CIO','VP',
+  'VRP','SST','RSE','QSE','HSE','QHSE','ETAM','RSSSCT']);
+// Casse « phrase » (Fonction, Poste…) : première lettre en majuscule, le reste en minuscule —
+// à l'exception des sigles connus (CSE, DRH, PDG…), toujours conservés en majuscules.
+function sentenceCase(str){
+  const s = (str==null ? '' : str).toString().trim();
+  if(!s) return s;
+  let first = true;
+  return s.replace(/[^\s-]+/g, tok => {
+    const isFirst = first; first = false;
+    if(FONCTION_ACRONYMS.has(tok.toUpperCase())) return tok.toUpperCase();
+    let out = tok.toLowerCase();
+    if(isFirst) out = out.charAt(0).toUpperCase() + out.slice(1);
+    return out;
+  });
 }
 function excelDate(v){
   const n=Number(v); if(!isFinite(n)||n<20000||n>90000) return v;
@@ -1199,7 +1238,7 @@ function buildOutput(){
     const lines = [`Contact ${n} :`];
     lines.push(`* Nom : ${cols.lastname ? properCase(get(src, cols.lastname)) : ''}`);
     lines.push(`* Prénom : ${cols.firstname ? properCase(get(src, cols.firstname)) : ''}`);
-    lines.push(`* Poste : ${get(src, 'Fonction')}`);
+    lines.push(`* Poste : ${sentenceCase(get(src, 'Fonction'))}`);
     const tel = get(src, 'Téléphone portable prospect'); if(tel) lines.push(`* Téléphone : ${formatPhone(tel)}`);
     const civ = get(src, 'Civilité'); if(civ) lines.push(`* Civilité : ${civ}`);
     return lines.join('\n');
@@ -1253,6 +1292,7 @@ function buildOutput(){
     if(cols.lastname  && r[cols.lastname])  r[cols.lastname]  = properCase(r[cols.lastname]);
     if(cols.adresse   && r[cols.adresse])   r[cols.adresse]   = properCase(r[cols.adresse], {company:true});
     if(cols.ville     && r[cols.ville])     r[cols.ville]     = properCase(r[cols.ville], {company:true});
+    if(r['Fonction']) r['Fonction'] = sentenceCase(r['Fonction']);
     const companyName = cols.company ? properCase((r[cols.company]||'').toString(), {company:true}) : '';
 
     const emailPrincipal = plan[i].principal;
