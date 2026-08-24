@@ -213,7 +213,7 @@ td.filled{background:var(--jade-soft)!important;color:var(--jade-deep);font-weig
     <span class="brand-sub">Préparation des imports</span>
   </div>
   <button class="nav-home" id="nav-home">← Accueil</button>
-  <span class="topbar-tag" id="topbar-tag">v17 · 08-18</span>
+  <span class="topbar-tag" id="topbar-tag">v18 · 08-24</span>
 </header>
 
 <input type="file" id="file-input" accept=".csv,.zip" multiple style="display:none">
@@ -481,12 +481,12 @@ function mapHeader(h){
   if(/cse.*(tel|phone)|(tel|phone).*cse/.test(n)) return 'Téléphone CSE';
   if(/(societe|entreprise).*(tel|phone)|(tel|phone).*(societe|entreprise)/.test(n)) return 'Téléphone entreprise';
   if(/siret/.test(n)) return 'SIRET entreprise';
-  if(/effectif|nb.?staff|headcount|nombre.*salarie|nb.?salarie|staff/.test(n)) return 'Effectif entreprise';
+  if(/effectif|nb.?staff|headcount|nombre.*salarie|nb.?salarie|staff|^employes?[_ ]?(dernier|actuel)?$/.test(n)) return 'Effectif entreprise';
   if(/code.?postal|^cp$|zip|postal.?code|postcode/.test(n)) return 'Code postal entreprise';
   if(/ville|locality|commune|^city$|^town$/.test(n)) return 'Ville entreprise';
   if(/type.*etabl|entite/.test(n)) return 'Type établissement';
   if(/boite postal|^bp$/.test(n)) return 'Boîte postale';
-  if(/adresse|address/.test(n)) return /\b2\b|complement/.test(n) ? 'Adresse entreprise 2' : 'Adresse entreprise';
+  if(/adresse|address|^rue$/.test(n)) return /\b2\b|complement/.test(n) ? 'Adresse entreprise 2' : 'Adresse entreprise';
   if(/commercial|auteur/.test(n)) return 'Commercial nom';
   if(/civilite|civility|^title$|salutation/.test(n)) return 'Civilité';
   if(/prenom|first.?name|given.?name/.test(n)) return 'Prénom';
@@ -495,6 +495,7 @@ function mapHeader(h){
   if(/date/.test(n)) return 'Date et heure';
   if(/mail|email|courriel/.test(n)) return 'Mail prospect';
   if(/portable|mobile|tel|phone/.test(n)) return 'Téléphone portable prospect';
+  if(/^denomination/.test(n)) return 'Nom entreprise';
   if(/entreprise|etablissement|raison.?social|societe|company|^nom soc/.test(n)) return 'Nom entreprise';
   if(/^nom\b|nom complet|visiteur nom|nom contact|nom prospect|nom du |last.?name|surname|family.?name/.test(n)) return 'Nom';
   return null;
@@ -643,6 +644,8 @@ async function loadFiles(fileList){
 
     // 2. Lire et HARMONISER (colonnes de même nature -> même colonne, notes regroupées)
     const canonPresent = new Set();      // champs canoniques réellement rencontrés
+    const extraHeaders = [];             // colonnes non reconnues, conservées telles quelles (ordre d'apparition)
+    const extraHeadersSeen = new Set();
     const merged = [];
     const skipped = [];                  // fichiers sans en-tête exploitable
     const cancelled = [];                // fichiers dont le formulaire a été annulé
@@ -690,7 +693,12 @@ async function loadFiles(fileList){
           const v = (r[src]==null ? '' : r[src]).toString().trim();
           if(to === '__NOTE'){ if(v && v !== '0') notes.push(`${src}: ${v}`); }
           else if(to){ if(v && !out[to]){ out[to] = r[src]; canonPresent.add(to); } }
-          else { if(v && v !== '0') notes.push(`${src}: ${v}`); }   // colonne inconnue -> versée dans Notes
+          else {
+            // Colonne non reconnue : conservée telle quelle, en colonne à part (pas dans Notes),
+            // pour que TOUTES les colonnes du fichier source restent visibles dans le résultat.
+            if(!(src in out)) out[src] = r[src];
+            if(!extraHeadersSeen.has(src)){ extraHeadersSeen.add(src); extraHeaders.push(src); }
+          }
         });
         if(notes.length){ out['Notes'] = notes.join(' | '); canonPresent.add('Notes'); }
         out['Fichier source'] = sh.name;
@@ -706,8 +714,9 @@ async function loadFiles(fileList){
       return;
     }
 
-    // ordre final des colonnes : canoniques (présentes) -> inconnues -> Fichier source
+    // ordre final des colonnes : canoniques (présentes) -> non reconnues (telles quelles) -> Fichier source
     const headerOrder = CANONICAL_ORDER.filter(h => canonPresent.has(h))
+                          .concat(extraHeaders)
                           .concat(['Fichier source']);
 
     // 3. État global
